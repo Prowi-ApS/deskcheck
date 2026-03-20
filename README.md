@@ -1,33 +1,23 @@
 # deskcheck
 
-A modular code deskcheck tool that uses Claude to find architectural and convention violations in your code.
+Modular code review powered by Claude. Define what to check as markdown, deskcheck runs each check in a fresh AI agent, and aggregates the findings.
 
-## The Problem
+![Run overview](docs/screenshots/run-overview.png)
 
-Code review tools fall into three categories, with a gap between them:
+## Why deskcheck?
 
-- **Tests** verify behavior. They tell you "the order flow produces the right result." They cannot tell you "the order flow uses raw arrays instead of typed DTOs."
-- **Static analysis** (ESLint, PHPStan) verifies types and syntax. It tells you "this variable is unused." It cannot tell you "this controller has business logic that belongs in a service."
-- **LLM reviewers** can catch architectural violations, but a single agent reviewing an entire branch suffers **context rot** — as its context fills with code, it starts missing the very patterns it's supposed to detect.
+Traditional code review tools leave a gap:
 
-## The Solution
+- **Tests** verify behavior — they can't tell you "this controller has business logic that belongs in a service"
+- **Linters** verify syntax — they can't tell you "this endpoint is missing input validation"
+- **A single LLM** reviewing a whole branch suffers **context rot** — as its context fills up, it starts missing the patterns it's supposed to catch
 
-This tool breaks every deskcheck into the smallest possible unit: **one file, one set of criteria, one fresh agent**. Each checker gets a clean context with only the code it needs to review and the specific rules it's checking. Results are aggregated mechanically.
+Deskcheck solves this by breaking every review into the smallest possible unit: **one file + one criterion + one fresh agent**. Each agent gets a clean context with only the code it needs and the specific rules to check. Results are aggregated mechanically.
 
 ```
-Your code + Criteria → Planner → N executor agents → Aggregated findings
-                                   (fresh context each)
+Your code + Criteria → N executor agents → Aggregated findings
+                        (fresh context each)
 ```
-
-### How it Works
-
-1. **You define criteria** — markdown files that describe what to check, which files to check, and how severe violations are.
-2. **The tool matches criteria to your files** — using glob patterns in each criterion's frontmatter.
-3. **Each match becomes a task** — one file + one criterion = one task.
-4. **Each task runs in a fresh agent** — a new Claude instance with only the code and criteria for that one task. No context leakage between tasks.
-5. **Findings are aggregated** — grouped by severity, file, and criterion.
-
-This eliminates context rot. A fresh agent with 5K tokens of context (one file + one set of criteria) catches violations with near-100% reliability. A single agent 150K into a review session will miss them.
 
 ## Quick Start
 
@@ -35,155 +25,185 @@ This eliminates context rot. A fresh agent with 5K tokens of context (one file +
 # Install
 npm install -g deskcheck
 
-# Initialize in your project
+# Initialize in your project (creates criteria directory + config)
 deskcheck init
 
-# Check your branch changes
-deskcheck diff develop
+# Review your branch changes against main
+deskcheck diff main
 
-# Check a specific file
-deskcheck "app/Services/OrderService.php"
+# Review a specific file
+deskcheck "src/services/PaymentService.ts"
 
-# Watch a deskcheck in progress (in another terminal)
-deskcheck watch
+# Open the web dashboard
+deskcheck serve
 ```
 
-## Criteria
+## How It Works
 
-Criteria are markdown files in your `deskcheck/criteria/` directory. Each criterion defines **what to check** and **which files to check**.
+### 1. You define criteria as markdown
 
-```
-deskcheck/criteria/
-├── architecture/
-│   ├── dto-enforcement.md
-│   └── separation-of-concerns.md
-└── backend/
-    └── controller-conventions.md
-```
-
-### Criterion Format
-
-Each criterion has YAML frontmatter (metadata) and a markdown body (the instructions given to the executor agent):
+Each criterion is a markdown file with YAML frontmatter that says **what to check**, **which files to check**, and **how important it is**:
 
 ```yaml
 ---
-description: "Ensures Data classes are used at architectural layer boundaries"
-severity: high
+description: "Checks for common security vulnerabilities"
+severity: critical
 globs:
-  - "app/Http/Controllers/**/*.php"
-  - "app/Services/**/*.php"
-  - "!app/Services/Internal/**/*.php"
-mode: "Create one review per changed file"
+  - "src/**/*.ts"
+  - "!src/**/*.test.ts"
 model: sonnet
 ---
 
-# DTO Enforcement
+You are a security reviewer. Check for:
 
-You are reviewing code for proper use of Data Transfer Objects at
-architectural layer boundaries.
+1. **Hardcoded secrets** — API keys, passwords, tokens in source code
+2. **SQL injection** — string concatenation in database queries
+3. **Missing input validation** — user input used without sanitization
 
-## What to Check
-
-1. Methods that pass raw arrays between layers (controller → service)
-2. Use of $request->validated() instead of Data::from($request)
-3. Missing Data classes where one should exist
-
-## What NOT to Check
-
-- Simple scalar parameters (string $id, int $count)
-- Internal private methods
-- Data passed to Eloquent methods
-
-## Severity Guidance
-
-- **critical**: A Data class exists but isn't used
-- **warning**: $request->validated() used instead of Data::from
-- **info**: New data shape that might benefit from a Data class
+For each issue, report the severity, file, line number, and a fix suggestion.
 ```
+
+Put criteria in `deskcheck/criteria/` — organize them however you like:
+
+```
+deskcheck/criteria/
+├── security/
+│   └── input-validation.md
+├── architecture/
+│   └── separation-of-concerns.md
+└── best-practices/
+    └── error-handling.md
+```
+
+### 2. Deskcheck matches criteria to your files
+
+Each criterion has `globs` that define which files it applies to. When you run `deskcheck diff main`, it gets the list of changed files and matches them against every criterion's globs. Each match becomes a **task**: one file + one criterion.
+
+### 3. Each task runs in a fresh agent
+
+Every task is executed by a new Claude agent with only:
+- The file content (or diff)
+- The criterion's instructions
+- Access to read tools (Read, Glob, Grep) for additional context
+
+No context leakage between tasks. A fresh agent reviewing one file against one set of rules catches issues with near-100% reliability.
+
+### 4. Findings are aggregated
+
+Results are grouped by file, criterion, and severity. You can browse them in the terminal, as markdown (for PR comments), as JSON (for tooling), or in the **web dashboard**:
+
+![File detail view](docs/screenshots/file-detail.png)
+
+## CLI Commands
+
+### `deskcheck diff [git-args...]`
+
+Deterministic review of git changes. No LLM planner — passes args directly to `git diff`.
+
+```bash
+deskcheck diff main                       # Changes vs main
+deskcheck diff --staged                   # Staged changes only
+deskcheck diff HEAD~3                     # Last 3 commits
+deskcheck diff main -- src/services/      # Scoped to a directory
+deskcheck diff main --dry-run             # Preview plan without executing
+deskcheck diff main --fail-on=critical    # Exit 1 if critical findings (for CI)
+deskcheck diff main --format=markdown     # Markdown output (for PR comments)
+```
+
+### `deskcheck "<prompt>"`
+
+Natural language review — an LLM agent interprets what you want to check.
+
+```bash
+deskcheck "src/services/OrderService.ts"
+deskcheck "check the auth module"
+deskcheck "the calculate method in Commission.ts"
+```
+
+### `deskcheck serve`
+
+Web dashboard with live updates. Shows all runs, task progress, usage/cost tracking, and findings with filtering.
+
+```bash
+deskcheck serve              # Start on default port (3000)
+deskcheck serve --port 8080  # Custom port
+```
+
+### `deskcheck show [plan-id]`
+
+Display results in the terminal.
+
+```bash
+deskcheck show                        # Latest run
+deskcheck show --format=markdown      # As markdown
+deskcheck show --format=json          # As JSON
+deskcheck show --fail-on=warning      # Exit 1 if warnings or worse
+```
+
+### `deskcheck watch [plan-id]`
+
+Live terminal tree view of a run in progress.
+
+### `deskcheck list`
+
+List all runs with status and finding counts.
+
+### `deskcheck init`
+
+Scaffold config and criteria directory for a new project.
+
+## Web Dashboard
+
+Start with `deskcheck serve` and open `http://localhost:3000`.
+
+**Run overview** — progress bar, usage/cost tracking, sortable task table with severity filters, and file coverage:
+
+![Run overview](docs/screenshots/run-overview.png)
+
+**File detail** — click any file to see all findings across criteria, with severity filtering and grouping options:
+
+![File detail](docs/screenshots/file-detail.png)
+
+The dashboard uses SSE for live updates — watch tasks complete in real time during execution.
+
+## Criterion Reference
 
 ### Frontmatter Fields
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `description` | Yes | — | Human-readable description shown in reports |
-| `severity` | Yes | — | Criterion importance: `critical`, `high`, `medium`, `low` |
-| `globs` | Yes | — | File patterns that activate this criterion. Prefix with `!` to exclude |
-| `mode` | No | `"Create one review per changed file"` | How to split tasks — natural language instruction |
-| `model` | No | `"haiku"` | Which Claude model: `haiku`, `sonnet`, `opus` |
+| `severity` | Yes | — | Importance: `critical`, `high`, `medium`, `low` |
+| `globs` | Yes | — | File patterns to match. Prefix with `!` to exclude |
+| `mode` | No | `"One task per file"` | How to split files into tasks (natural language) |
+| `model` | No | `"haiku"` | Claude model: `haiku`, `sonnet`, `opus` |
+
+### Choosing the Right Model
+
+| Use Case | Model | Why |
+|----------|-------|-----|
+| Simple patterns (naming, imports, console.log) | `haiku` | Fast and cheap |
+| Architectural judgment (separation of concerns, DTOs) | `sonnet` | Good reasoning at moderate cost |
+| Security analysis, complex data flow | `opus` | Deep analysis for high-stakes checks |
 
 ### The Detective Prompt
 
-The markdown body below the frontmatter is the **detective prompt** — the instructions given to each executor agent. It should include:
+The markdown body below the frontmatter is the **detective prompt** — instructions given to each executor agent. Include:
 
-- **What to Check** — specific patterns, violations, or criteria
-- **What NOT to Check** — exclusions to prevent false positives
-- **Severity Guidance** — when to report critical vs. warning vs. info
+- **What to check** — specific patterns and violations
+- **What NOT to check** — exclusions to reduce false positives
+- **Severity guidance** — when to report critical vs warning vs info
 
-The prompt can reference project files and tell the agent to use tools for navigation (Read, Glob, Grep) to understand context beyond the reviewed file.
+The agent has read access to the project, so your prompt can reference other files:
 
-## CLI Commands
-
-### `deskcheck diff [git-args...]`
-
-Deterministic check of git changes. No LLM planner — passes args directly to `git diff`. Fast and cheap.
-
-```bash
-deskcheck diff develop                    # Changes vs develop
-deskcheck diff --staged                   # Staged changes
-deskcheck diff HEAD~3                     # Last 3 commits
-deskcheck diff main -- app/Services/      # Scoped to directory
-deskcheck diff develop --dry-run          # Preview plan without executing
-deskcheck diff develop --fail-on=critical # Exit 1 if critical findings (CI)
-deskcheck diff develop --format=markdown  # Output as markdown (for PR comments)
+```markdown
+Read `.eslintrc.js` to understand the project's linting config.
+Then check for architectural patterns that ESLint can't catch.
 ```
-
-### `deskcheck "<prompt>"`
-
-Natural language deskcheck — an LLM agent interprets what you want to check.
-
-```bash
-deskcheck "app/Services/OrderService.php"           # Full file check
-deskcheck "the calculate method in Commission.php"  # Symbol check
-deskcheck "check the auth module"                   # Vague — agent figures it out
-```
-
-### `deskcheck watch [plan-id]`
-
-Live tree view of a deskcheck in progress. Polls storage every second and reprints.
-
-```bash
-# Terminal 1: start a deskcheck
-deskcheck diff develop
-
-# Terminal 2: watch it
-deskcheck watch
-```
-
-Shows a tree with criteria as parents, files as children, status icons (`○` pending, `◐` active, `✓` done, `✗` error), findings counts, and a progress bar.
-
-### `deskcheck show [plan-id]`
-
-Display results from a completed (or in-progress) deskcheck.
-
-```bash
-deskcheck show                        # Latest deskcheck
-deskcheck show 2026-03-19_143022      # Specific deskcheck
-deskcheck show --format=markdown      # Markdown output
-deskcheck show --format=json          # JSON output
-deskcheck show --fail-on=warning      # Exit 1 if warnings or worse
-```
-
-### `deskcheck list`
-
-List all deskcheck runs with their status and finding counts.
-
-### `deskcheck init`
-
-Scaffold `.deskcheck/config.json` and `deskcheck/criteria/` directory.
 
 ## Configuration
 
-Configuration lives in `.deskcheck/config.json`:
+Configuration lives in `.deskcheck/config.json` (created by `deskcheck init`):
 
 ```json
 {
@@ -194,152 +214,49 @@ Configuration lives in `.deskcheck/config.json`:
     "mcp_servers": {}
   },
   "agents": {
-    "planner": {
-      "model": "haiku"
-    },
-    "executor": {
-      "additional_tools": [],
-      "additional_mcp_servers": {}
-    },
-    "evaluator": {
-      "model": "haiku"
+    "planner": { "model": "haiku" },
+    "executor": {},
+    "evaluator": { "model": "haiku" }
+  }
+}
+```
+
+The executor **model** comes from each criterion's `model` field, not from config. This lets cheap checks use `haiku` and important checks use `sonnet`.
+
+## CI Integration
+
+Use `--fail-on` to gate your pipeline:
+
+```bash
+# Fail if any critical findings
+deskcheck diff $BASE_BRANCH --fail-on=critical
+
+# Output as markdown for PR comments
+deskcheck diff $BASE_BRANCH --format=markdown > review.md
+gh pr comment $PR_NUMBER --body "$(cat review.md)"
+```
+
+Exit codes: `0` = no findings matching threshold, `1` = findings exceed threshold.
+
+## MCP Server
+
+Deskcheck can run as an MCP server for Claude Code integration:
+
+```json
+{
+  "mcpServers": {
+    "deskcheck": {
+      "command": "npx",
+      "args": ["deskcheck-mcp"]
     }
   }
 }
 ```
 
-### Agent Permissions
+## Usage Tracking
 
-Permissions use a shared base + per-role overrides:
+Every run tracks token usage and cost per task. The web dashboard shows totals (cost, input/output tokens) and per-task breakdowns, so you can see exactly how much each review costs and which criteria are most expensive.
 
-- **`shared.allowed_tools`** — tools available to all agents (default: Read, Glob, Grep)
-- **`shared.mcp_servers`** — MCP servers available to all agents
-- **`agents.executor.additional_tools`** — extra tools for executor agents only
-- **`agents.executor.additional_mcp_servers`** — extra MCP servers for executors (e.g., Serena for code navigation)
+## License
 
-Executor **model** is NOT set in config — it comes from each criterion's `model` frontmatter field. This lets cheap checks use `haiku` and deep analysis use `sonnet` or `opus`.
-
-## Storage
-
-Each deskcheck run creates a timestamped directory with two files:
-
-```
-.deskcheck/runs/
-└── 2026-03-19_143022/
-    ├── plan.json       # Tasks, context, coverage — what was checked
-    └── results.json    # Findings, aggregations — what was found
-```
-
-- **plan.json** contains the full plan: source, tasks (with executor context and prompts), matched/unmatched files, criterion summaries. Can be pruned to save space after the run.
-- **results.json** contains findings grouped by severity, file, and criterion. This is the permanent record.
-
-Both files are updated incrementally during execution, enabling live watching via `deskcheck watch`.
-
-## CI Integration
-
-Use `deskcheck diff` with `--fail-on` for CI gating:
-
-```bash
-# In your CI pipeline
-deskcheck diff $BASE_BRANCH --fail-on=critical --format=markdown > deskcheck.md
-
-# Post as PR comment (example with gh CLI)
-gh pr comment $PR_NUMBER --body "$(cat deskcheck.md)"
-```
-
-Exit codes:
-- `0` — no findings matching the threshold
-- `1` — findings exceed the threshold
-
-## MCP Server
-
-The tool also functions as an MCP server for Claude Code integration:
-
-```json
-// .mcp.json
-{
-  "deskcheck": {
-    "command": "node",
-    "args": ["./node_modules/deskcheck/build/mcp-server.js"]
-  }
-}
-```
-
-This exposes deskcheck tools (start_review_plan, create_review_task, finish_review, etc.) so Claude Code can drive the deskcheck process programmatically.
-
-## Architecture
-
-```
-CLI / MCP Server
-     │
-     ├── agents/
-     │   ├── planner.ts        — Agent SDK agent for natural language intent
-     │   ├── orchestrator.ts   — Spawns executor agents, collects findings
-     │   └── executor-prompt.ts — Builds per-task system prompt
-     │
-     ├── core/
-     │   ├── types.ts          — All TypeScript interfaces
-     │   ├── config.ts         — Load .deskcheck/config.json
-     │   ├── module-parser.ts  — Parse criterion markdown
-     │   ├── glob-matcher.ts   — Match files against criterion globs
-     │   ├── storage.ts        — Two-file storage (plan.json + results.json)
-     │   ├── plan-builder.ts   — Create plan with tasks from file list
-     │   └── context-extractor.ts — Extract diff/file/symbol content
-     │
-     ├── mcp/
-     │   └── tools.ts          — MCP tool registration
-     │
-     └── renderers/
-         ├── terminal.ts       — ANSI-colored terminal output
-         ├── watch.ts          — Live tree view for deskcheck watch
-         ├── markdown.ts       — Markdown for PR comments
-         └── json.ts           — JSON for piping
-```
-
-**Key design principle:** `core/` has zero framework dependencies. It's pure TypeScript that handles parsing, matching, and storage. `agents/` depends only on the Agent SDK. `mcp/` depends only on the MCP SDK. `renderers/` depend only on types.
-
-## Writing Criteria
-
-### Start Simple
-
-A minimal criterion:
-
-```yaml
----
-description: "Check for console.log statements in production code"
-severity: low
-globs:
-  - "src/**/*.ts"
-  - "!src/**/*.test.ts"
-model: haiku
----
-
-Check the code for `console.log` statements that should be removed
-before merging to production. Ignore logging in test files.
-```
-
-### Use the Right Model
-
-| Use case | Model | Cost |
-|----------|-------|------|
-| Simple pattern checks (naming, imports) | `haiku` | Low |
-| Architectural judgment (SoC, DTOs) | `sonnet` | Medium |
-| Security analysis, complex data flow | `opus` | High |
-
-### Reference Project Rules
-
-Your detective prompt can tell the executor to read project files:
-
-```markdown
-Read `.eslintrc.js` to understand the project's linting rules.
-Then check if the reviewed code follows patterns not covered by ESLint.
-```
-
-### Glob Patterns
-
-| Pattern | Matches |
-|---------|---------|
-| `app/**/*.php` | All PHP files under app/ |
-| `src/components/**/*.vue` | All Vue components |
-| `!**/*.test.ts` | Exclude test files |
-| `app/Http/Controllers/**/*.php` | Controllers only |
+MIT
