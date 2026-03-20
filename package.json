@@ -12,11 +12,18 @@
     "deskcheck": "./build/cli.js",
     "deskcheck-mcp": "./build/mcp-server.js"
   },
+  "files": [
+    "build/",
+    "ui/dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && cd ui && npm ci && npx vite build"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.79",
