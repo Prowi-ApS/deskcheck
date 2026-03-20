@@ -257,6 +257,10 @@ Deskcheck can run as an MCP server for Claude Code integration:
 
 Every run tracks token usage and cost per task. The web dashboard shows totals (cost, input/output tokens) and per-task breakdowns, so you can see exactly how much each review costs and which criteria are most expensive.
 
+## Disclaimer
+
+This tool was vibe-coded in a single day using [Claude Code](https://claude.ai/claude-code). The architecture, implementation, web UI, and even this README were built through conversation with Claude Opus 4.6. It works, we use it, but it hasn't been battle-tested at scale. Expect rough edges. Contributions welcome.
+
 ## License
 
 MIT
