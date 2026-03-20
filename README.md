@@ -23,7 +23,7 @@ Your code + Criteria → N executor agents → Aggregated findings
 
 ```bash
 # Install
-npm install -g deskcheck
+npm install -g @prowi/deskcheck
 
 # Initialize in your project (creates criteria directory + config)
 deskcheck init

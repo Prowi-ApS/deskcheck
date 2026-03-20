@@ -1,5 +1,5 @@
 {
-  "name": "deskcheck",
+  "name": "@prowi/deskcheck",
   "version": "0.1.0",
   "description": "Modular code review tool powered by Claude Agent SDK — define review criteria as markdown, run them against your codebase, get structured findings with a web dashboard.",
   "license": "MIT",
