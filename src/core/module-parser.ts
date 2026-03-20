@@ -1,0 +1,133 @@
+import fs from "node:fs";
+import path from "node:path";
+import matter from "gray-matter";
+import type { AgentModel, ModuleSeverity, ReviewModule } from "./types.js";
+
+const VALID_SEVERITIES: ReadonlySet<string> = new Set<ModuleSeverity>([
+  "critical",
+  "high",
+  "medium",
+  "low",
+]);
+
+const VALID_MODELS: ReadonlySet<string> = new Set<AgentModel>([
+  "haiku",
+  "sonnet",
+  "opus",
+]);
+
+const DEFAULT_MODE = "Create one review per changed file";
+const DEFAULT_MODEL: AgentModel = "haiku";
+
+/**
+ * Parse a single criterion markdown file into a ReviewModule object.
+ *
+ * Reads the file, extracts YAML frontmatter with `gray-matter`, validates
+ * required fields, applies defaults for optional fields, and returns the
+ * structured criterion representation.
+ *
+ * @param filePath - Absolute or relative path to the markdown file.
+ * @param basePath - Base directory used to compute relative paths and criterion IDs.
+ * @returns Parsed ReviewModule.
+ * @throws {Error} If the file cannot be read or frontmatter is invalid.
+ */
+export function parseModule(filePath: string, basePath: string): ReviewModule {
+  const absolutePath = path.resolve(filePath);
+  const absoluteBase = path.resolve(basePath);
+
+  const raw = fs.readFileSync(absolutePath, "utf-8");
+  const { data: frontmatter, content } = matter(raw);
+
+  const relativePath = path.relative(absoluteBase, absolutePath);
+  const relativeFile = path.relative(path.dirname(absoluteBase), absolutePath);
+
+  // --- Validate required fields ---
+
+  if (typeof frontmatter.description !== "string" || frontmatter.description.trim() === "") {
+    throw new Error(
+      `Invalid criterion ${relativePath}: "description" is required and must be a non-empty string`,
+    );
+  }
+
+  if (!VALID_SEVERITIES.has(frontmatter.severity)) {
+    throw new Error(
+      `Invalid criterion ${relativePath}: "severity" must be one of: ${[...VALID_SEVERITIES].join(", ")}. Got: ${JSON.stringify(frontmatter.severity)}`,
+    );
+  }
+
+  if (!Array.isArray(frontmatter.globs) || frontmatter.globs.length === 0) {
+    throw new Error(
+      `Invalid criterion ${relativePath}: "globs" is required and must be a non-empty array of strings`,
+    );
+  }
+
+  for (const glob of frontmatter.globs) {
+    if (typeof glob !== "string" || glob.trim() === "") {
+      throw new Error(
+        `Invalid criterion ${relativePath}: each entry in "globs" must be a non-empty string. Got: ${JSON.stringify(glob)}`,
+      );
+    }
+  }
+
+  // --- Apply defaults for optional fields ---
+
+  const mode =
+    typeof frontmatter.mode === "string" && frontmatter.mode.trim() !== ""
+      ? frontmatter.mode
+      : DEFAULT_MODE;
+
+  const model = frontmatter.model ?? DEFAULT_MODEL;
+  if (!VALID_MODELS.has(model)) {
+    throw new Error(
+      `Invalid criterion ${relativePath}: "model" must be one of: ${[...VALID_MODELS].join(", ")}. Got: ${JSON.stringify(model)}`,
+    );
+  }
+
+  // --- Build the criterion ID from relative path without extension ---
+
+  const id = relativePath.replace(/\.md$/, "").split(path.sep).join("/");
+
+  return {
+    id,
+    file: relativeFile.split(path.sep).join("/"),
+    description: frontmatter.description,
+    severity: frontmatter.severity as ModuleSeverity,
+    globs: frontmatter.globs as string[],
+    mode,
+    model: model as AgentModel,
+    prompt: content.trim(),
+  };
+}
+
+/**
+ * Discover all criteria by recursively scanning a directory for `.md` files.
+ *
+ * Each markdown file is parsed for YAML frontmatter containing criterion metadata
+ * (description, severity, globs, etc.) and the markdown body becomes the detective prompt.
+ *
+ * @param modulesDir - Path to the directory containing criterion markdown files.
+ * @returns Array of parsed ReviewModule objects, sorted by ID for deterministic ordering.
+ * @throws {Error} If the directory does not exist or any criterion file has invalid frontmatter.
+ */
+export function discoverModules(modulesDir: string): ReviewModule[] {
+  const absoluteDir = path.resolve(modulesDir);
+
+  if (!fs.existsSync(absoluteDir)) {
+    throw new Error(`Criteria directory does not exist: ${absoluteDir}`);
+  }
+
+  const entries = fs.readdirSync(absoluteDir, { recursive: true }) as string[];
+
+  const mdFiles = entries
+    .filter((entry) => entry.endsWith(".md"))
+    .sort();
+
+  const modules: ReviewModule[] = [];
+
+  for (const relativeFile of mdFiles) {
+    const absoluteFile = path.join(absoluteDir, relativeFile);
+    modules.push(parseModule(absoluteFile, absoluteDir));
+  }
+
+  return modules.sort((a, b) => a.id.localeCompare(b.id));
+}
