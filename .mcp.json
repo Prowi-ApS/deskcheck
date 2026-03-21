@@ -1,0 +1,10 @@
+{
+    "mcpServers": {
+        "playwright": {
+            "command": "bash",
+            "args": [
+                "devtools/mcp/playwright/playwright.sh"
+            ]
+        }
+    }
+}

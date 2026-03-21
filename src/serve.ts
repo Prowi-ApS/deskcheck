@@ -259,6 +259,10 @@ export function startServer(config: ReviewConfig, projectRoot: string, port: num
 
     // GET / -> dashboard HTML (re-read on each request so UI rebuilds are picked up without restart)
     if (segments.length === 0) {
+      if (!fs.existsSync(uiHtmlPath)) {
+        sendHtml(res, "<html><body><p>UI not built yet. Run <code>cd ui &amp;&amp; npm run build</code>, or use the Vite dev server at <code>http://localhost:5173</code>.</p></body></html>");
+        return;
+      }
       const dashboardHtml = fs.readFileSync(uiHtmlPath, "utf-8");
       sendHtml(res, dashboardHtml);
       return;

@@ -1,0 +1,53 @@
+{
+  "name": "Deskcheck Dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "INSTALL_ZSH": "true",
+      "USER_UID": "1000",
+      "USER_GID": "1000",
+      "PLAYWRIGHT_VERSION": "1.52.0"
+    }
+  },
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
+    "source=${localWorkspaceFolderBasename}-claude,target=/home/vscode/.claude,type=volume"
+  ],
+  "workspaceFolder": "/home/vscode/project",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/project,type=bind,consistency=delegated",
+  "runArgs": [
+    "--init",
+    "--cpu-shares=512",
+    "--shm-size=2g"
+  ],
+  "portsAttributes": {
+    "6080": { "label": "noVNC", "onAutoForward": "silent" }
+  },
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  },
+  "initializeCommand": "./.devcontainer/initializeCommand.sh",
+  "postCreateCommand": "./.devcontainer/postCreateCommand.sh",
+  "postAttachCommand": "./.devcontainer/postAttachCommand.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.vscode-typescript-next",
+        "dbaeumer.vscode-eslint"
+      ],
+      "settings": {
+        "task.autoDetect": "off",
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  },
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "dockerDashComposeVersion": "v2"
+    }
+  },
+  "containerEnv": {
+    "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}"
+  }
+}
