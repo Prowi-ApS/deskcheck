@@ -50,16 +50,7 @@
         "cwd": "${workspaceFolder}/ui"
       },
       "isBackground": true,
-      "problemMatcher": {
-        "pattern": {
-          "regexp": "^$"
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".",
-          "endsPattern": "Local:.*http"
-        }
-      },
+      "problemMatcher": [],
       "presentation": {
         "group": "dev",
         "reveal": "always"

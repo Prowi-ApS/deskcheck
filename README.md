@@ -257,6 +257,34 @@ Deskcheck can run as an MCP server for Claude Code integration:
 
 Every run tracks token usage and cost per task. The web dashboard shows totals (cost, input/output tokens) and per-task breakdowns, so you can see exactly how much each review costs and which criteria are most expensive.
 
+## Development
+
+The fastest way to get started is with the included **Dev Container** (VS Code + Docker):
+
+1. Open the repo in VS Code
+2. When prompted, click **"Reopen in Container"** (or run `Dev Containers: Reopen in Container` from the command palette)
+3. Press **Ctrl+Shift+B** to launch the dev environment
+
+This starts three processes in a single terminal group:
+- **Backend server** on port 3000 (builds TypeScript, then runs `deskcheck serve`)
+- **TypeScript watch** (`tsc --watch` for backend changes)
+- **Vite dev server** on port 5173 (Vue UI with hot reload)
+
+Open `http://localhost:5173` for UI development — API requests are proxied to the backend automatically.
+
+### Without Dev Container
+
+```bash
+# Terminal 1: backend
+npm run build && node build/cli.js serve
+
+# Terminal 2: TypeScript watch
+npm run dev
+
+# Terminal 3: UI with hot reload
+cd ui && npm install && npm run dev
+```
+
 ## Disclaimer
 
 This tool was vibe-coded in a single day using [Claude Code](https://claude.ai/claude-code). The architecture, implementation, web UI, and even this README were built through conversation with Claude Opus 4.6. It works, we use it, but it hasn't been battle-tested at scale. Expect rough edges. Contributions welcome.
