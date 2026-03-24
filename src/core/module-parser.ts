@@ -131,3 +131,47 @@ export function discoverModules(modulesDir: string): ReviewModule[] {
 
   return modules.sort((a, b) => a.id.localeCompare(b.id));
 }
+
+/**
+ * Filter modules by criteria name patterns.
+ *
+ * Each pattern is matched against the module ID. A match occurs if the
+ * pattern equals the full ID or the final segment (filename without path).
+ * For example, "dto-enforcement" matches "architecture/dto-enforcement".
+ *
+ * @param modules - All discovered modules.
+ * @param patterns - Criteria name patterns to include (e.g., ["dto-enforcement", "backend/controller-conventions"]).
+ * @returns Filtered modules. Throws if any pattern matched nothing.
+ */
+export function filterModules(modules: ReviewModule[], patterns: string[]): ReviewModule[] {
+  const filtered: ReviewModule[] = [];
+  const unmatchedPatterns: string[] = [];
+
+  for (const pattern of patterns) {
+    const normalized = pattern.trim().toLowerCase();
+    const matches = modules.filter((m) => {
+      const id = m.id.toLowerCase();
+      const lastSegment = id.split("/").pop() ?? id;
+      return id === normalized || lastSegment === normalized;
+    });
+
+    if (matches.length === 0) {
+      unmatchedPatterns.push(pattern);
+    } else {
+      for (const match of matches) {
+        if (!filtered.some((f) => f.id === match.id)) {
+          filtered.push(match);
+        }
+      }
+    }
+  }
+
+  if (unmatchedPatterns.length > 0) {
+    const available = modules.map((m) => m.id).join(", ");
+    throw new Error(
+      `No criteria matched: ${unmatchedPatterns.join(", ")}. Available: ${available}`,
+    );
+  }
+
+  return filtered.sort((a, b) => a.id.localeCompare(b.id));
+}

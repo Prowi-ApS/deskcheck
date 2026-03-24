@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { Command } from "commander";
 import { loadConfig, DEFAULT_CONFIG } from "./core/config.js";
 import { ReviewStorage } from "./core/storage.js";
-import { discoverModules } from "./core/module-parser.js";
+import { discoverModules, filterModules } from "./core/module-parser.js";
 import { buildPlanWithTasks } from "./core/plan-builder.js";
 import { ReviewPlanner } from "./agents/planner.js";
 import { ReviewOrchestrator } from "./agents/orchestrator.js";
@@ -233,7 +233,7 @@ function showCommand(id: string | undefined, options: { format: string; failOn?:
 /** `deskcheck diff [...git-args]` — deterministic, no LLM planner. */
 async function diffCommand(
   gitArgs: string[],
-  options: { format: string; failOn?: string; dryRun: boolean; concurrency: number },
+  options: { format: string; failOn?: string; dryRun: boolean; concurrency: number; criteria?: string },
 ): Promise<void> {
   const projectRoot = resolveProjectRoot();
   const config = loadConfig(projectRoot);
@@ -263,9 +263,14 @@ async function diffCommand(
     process.exit(0);
   }
 
-  // Discover modules and build plan
+  // Discover modules and optionally filter by --criteria
   const modulesDir = path.resolve(projectRoot, config.modules_dir);
-  const modules = discoverModules(modulesDir);
+  let modules = discoverModules(modulesDir);
+
+  if (options.criteria) {
+    const patterns = options.criteria.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+    modules = filterModules(modules, patterns);
+  }
 
   // Build a human-readable name from git args
   const diffTarget = gitArgs.filter((a) => !a.startsWith("--")).join(" ") || "working tree";
@@ -302,15 +307,18 @@ async function diffCommand(
 /** Default command — natural language deskcheck via LLM planner. */
 async function deskchecCommand(
   prompt: string,
-  options: { failOn?: string },
+  options: { failOn?: string; criteria?: string },
 ): Promise<void> {
   const projectRoot = resolveProjectRoot();
   const config = loadConfig(projectRoot);
   const storageDir = path.join(projectRoot, config.storage_dir);
 
   console.log(`${DIM}Planning...${RESET}`);
+  const criteriaFilter = options.criteria
+    ? options.criteria.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
+    : undefined;
   const planner = new ReviewPlanner(config, projectRoot);
-  const plan = await planner.plan(prompt);
+  const plan = await planner.plan(prompt, criteriaFilter);
 
   printPlanSummary(plan);
 
@@ -399,7 +407,8 @@ program
 program
   .argument("[prompt]", "What to check (natural language)")
   .option("--fail-on <severities>", "Exit non-zero if findings match: critical, warning, info (comma-separated)")
-  .action(async (prompt: string | undefined, options: { failOn?: string }) => {
+  .option("--criteria <names>", "Only run specific criteria (comma-separated, e.g. dto-enforcement,controller-conventions)")
+  .action(async (prompt: string | undefined, options: { failOn?: string; criteria?: string }) => {
     if (!prompt) {
       program.help();
       return;
@@ -421,6 +430,7 @@ program
   .option("--fail-on <severities>", "Exit non-zero if findings match: critical, warning, info")
   .option("--dry-run", "Show the plan without executing", false)
   .option("--concurrency <n>", "Max concurrent executor agents", "5")
+  .option("--criteria <names>", "Only run specific criteria (comma-separated, e.g. dto-enforcement,controller-conventions)")
   .addHelpText("after", `
 Examples:
   deskcheck diff develop              Check changes vs develop branch
@@ -429,12 +439,14 @@ Examples:
   deskcheck diff main -- app/         Check changes in app/ vs main
   deskcheck diff develop --dry-run    Show plan without executing
   deskcheck diff develop --fail-on=critical  Exit non-zero on critical findings
+  deskcheck diff develop --criteria=dto-enforcement  Only run one criterion
   `)
-  .action(async (gitArgs: string[], options: { format: string; failOn?: string; dryRun: boolean; concurrency: string }) => {
+  .action(async (gitArgs: string[], options: { format: string; failOn?: string; dryRun: boolean; concurrency: string; criteria?: string }) => {
     try {
       await diffCommand(gitArgs, {
         ...options,
         concurrency: parseInt(options.concurrency, 10) || 5,
+        criteria: options.criteria,
       });
     } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);

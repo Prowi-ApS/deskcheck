@@ -2,7 +2,7 @@ import path from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
-import { discoverModules } from "../core/module-parser.js";
+import { discoverModules, filterModules } from "../core/module-parser.js";
 import { buildPlanWithTasks } from "../core/plan-builder.js";
 import { ReviewStorage } from "../core/storage.js";
 import type { ReviewConfig, ReviewPlan } from "../core/types.js";
@@ -36,11 +36,15 @@ export class ReviewPlanner {
    * for creating plans and tasks, plus standard git/read tools for
    * discovering what to review.
    */
-  async plan(input: string): Promise<ReviewPlan> {
+  async plan(input: string, criteriaFilter?: string[]): Promise<ReviewPlan> {
     const storageDir = path.resolve(this.projectRoot, this.config.storage_dir);
     const storage = new ReviewStorage(storageDir);
     const modulesDir = path.resolve(this.projectRoot, this.config.modules_dir);
-    const modules = discoverModules(modulesDir);
+    let modules = discoverModules(modulesDir);
+
+    if (criteriaFilter && criteriaFilter.length > 0) {
+      modules = filterModules(modules, criteriaFilter);
+    }
 
     // Build the module summary for the agent's context
     const moduleDescriptions = modules.map((m) =>
