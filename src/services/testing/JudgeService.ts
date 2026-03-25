@@ -1,6 +1,7 @@
 import { ExecutorService } from "../ExecutorService.js";
 import { buildJudgePrompt } from "../../prompts/JudgePrompt.js";
 import type { ReviewConfig } from "../../config/types.js";
+import type { AgentModel } from "../../types/criteria.js";
 import type { ReviewModule } from "../../types/criteria.js";
 import type { Finding, TaskUsage } from "../../types/review.js";
 import type { JudgeResult } from "../../types/testing.js";
@@ -12,14 +13,17 @@ import type { JudgeResult } from "../../types/testing.js";
 /**
  * Spawns a judge agent to evaluate executor findings against expected results.
  *
- * The judge is a pure reasoning agent (haiku model, no tools, single turn)
- * that compares findings to expectations and produces structured verdicts.
+ * The judge is a pure reasoning agent (no tools, single turn) that compares
+ * findings to expectations and produces structured verdicts. Model is
+ * configurable via config.agents.judge.model (default: opus).
  */
 export class JudgeService {
   private readonly executorService: ExecutorService;
+  private readonly judgeModel: AgentModel;
 
   constructor(config: ReviewConfig, projectRoot: string) {
     this.executorService = new ExecutorService(config, projectRoot);
+    this.judgeModel = config.agents.judge.model ?? "opus";
   }
 
   /**
@@ -44,8 +48,8 @@ export class JudgeService {
       fixtureContent,
     );
 
-    // Judge uses haiku, no tools, single turn — pure reasoning
-    const executorResult = await this.executorService.execute(prompt, "haiku", {
+    // Judge uses configured model (default opus), no tools, single turn
+    const executorResult = await this.executorService.execute(prompt, this.judgeModel, {
       tools: [],
       maxTurns: 1,
     });

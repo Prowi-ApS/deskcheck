@@ -46,5 +46,6 @@ export interface ReviewConfig {
     planner: AgentRoleConfig;
     executor: AgentRoleConfig;
     evaluator: AgentRoleConfig;
+    judge: AgentRoleConfig;
   };
 }

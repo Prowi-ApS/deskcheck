@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import type { ReviewConfig } from "../../config/types.js";
 import type { TestCase, TestCaseResult, TestRun } from "../../types/testing.js";
 import type { ReviewTask } from "../../types/review.js";
@@ -130,8 +131,12 @@ export class TestRunnerService {
     const fixtureContent = fs.readFileSync(testCase.fixtureFile, "utf-8");
 
     // Step 3: Parse the criterion
-    const criterionDir = testCase.criterionFile.split("/").slice(0, -1).join("/");
-    const criterion = parseCriterion(testCase.criterionFile, criterionDir || ".");
+    // criterionFile is relative to the parent of the criteria dir (e.g. "criteria/backend/controller-conventions.md")
+    // The criteria dir config value is e.g. "deskcheck/criteria", so the parent is "deskcheck/"
+    // parseCriterion needs the absolute file path and the absolute criteria dir as base
+    const criteriaDir = path.resolve(this.projectRoot, this.config.modules_dir);
+    const absoluteCriterionFile = path.resolve(path.dirname(criteriaDir), testCase.criterionFile);
+    const criterion = parseCriterion(absoluteCriterionFile, criteriaDir);
 
     // Step 4: Build a synthetic ReviewTask for the executor
     const task: ReviewTask = {

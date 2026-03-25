@@ -16,6 +16,7 @@ export const DEFAULT_CONFIG: ReviewConfig = {
     planner: { model: "haiku" },
     executor: {},
     evaluator: { model: "haiku" },
+    judge: { model: "opus" },
   },
 };
 
