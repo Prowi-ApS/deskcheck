@@ -1,6 +1,6 @@
 # Writing Effective Criteria
 
-Lessons learned from real-world testing of deskcheck criteria. This is a living document — update it as we learn more.
+Lessons learned from real-world testing of deskcheck criteria.
 
 ---
 
@@ -33,7 +33,7 @@ We ran the same criterion (`controller-conventions`) against the same file (`Tri
 | Model | Use When | Examples |
 |-------|----------|---------|
 | **Haiku** | Purely mechanical pattern matching. "Does X exist?" "Is Y imported?" No judgment required. | Check that all files have a license header. Check that no `console.log` exists in production code. |
-| **Sonnet** | Judgment-required checks. The criterion references rule files, has a "What NOT to Check" section, or requires understanding code intent. | Controller conventions, DTO enforcement, separation of concerns, naming conventions. |
+| **Sonnet** | Judgment-required checks. The criterion references rule files, has a "What NOT to Check" section, or requires understanding code intent. **Default choice.** | Controller conventions, DTO enforcement, separation of concerns, naming conventions. |
 | **Opus** | Complex multi-step reasoning, cross-file analysis, architectural assessment. | "Does this service maintain a single responsibility across all its methods?" |
 
 **Rule of thumb:** If your criterion has a "What NOT to Check" section, it's not haiku-appropriate. Haiku struggles with exclusion rules.
@@ -55,52 +55,6 @@ We ran the same criterion (`controller-conventions`) against the same file (`Tri
 4. **Reference rule files.** Point the executor to the actual rule files in `.claude/rules/` so it reviews against the documented standard, not its own interpretation.
 
 5. **Output format section.** Tell the executor what to include in each finding: method name, line number, which check it violates, and a concrete fix suggestion.
-
-### Criterion Template
-
-```markdown
----
-description: "One-line description of what this criterion checks"
-severity: high
-globs:
-  - "app/path/**/*.php"
-mode: "Create one review per changed file"
-model: sonnet
----
-
-# [Name] Review
-
-You are reviewing [file type] to check for [specific thing].
-
-## Background
-
-Read these rule files before starting your review:
-- `.claude/rules/path/to/rule.md` — What it covers
-
-## What to Check
-
-[Numbered list of specific, concrete things to look for]
-
-## What NOT to Check
-
-[Explicit list of things that might look related but should be ignored]
-
-## Severity Guidance
-
-| Severity | Condition |
-|----------|-----------|
-| **critical** | [Specific condition] |
-| **warning** | [Specific condition] |
-| **info** | [Specific condition] |
-
-## Output Format
-
-For each finding, report:
-- The method name and line number
-- Which check it violates (reference the number from "What to Check")
-- The severity level
-- A concrete suggestion for how to fix it
-```
 
 ---
 
@@ -133,97 +87,35 @@ For each finding, report:
 
 ---
 
-## Testing Criteria
+## Writing Test Fixtures
 
-### The Problem
+### Fixture Rules
 
-Criteria are prompts. Prompts are non-deterministic. You can't assert `expect(findings).toEqual(exact_list)`. But you CAN verify:
+- **Never hint at violations in fixture code.** No `// VIOLATION:` or `// CLEAN:` comments. The executor must find violations on its own — that's what we're testing.
+- Be minimal — only enough code to trigger the target violations.
+- Be realistic — the code should look like real code, not contrived gibberish.
+- One clear violation per check in the criterion.
 
-1. **Recall** — Known violations are found
-2. **Precision** — Clean code produces no findings
-3. **Scope** — Findings only reference checks from the criterion (no freelancing)
+### expected.md Rules
 
-### Approach: Synthetic Test Fixtures
+- **Keep expectations focused on key violations, not every symptom.** A criterion checking for `$request->validate()` should expect "found raw validate()" — not every individual `$validated['key']` access downstream. Too many granular expectations lead to brittle tests.
+- Use the structured sections: `## Should Find`, `## Should Not Find`, `## Notes`.
+- "Should Not Find" is as important as "Should Find" — it catches freelancing.
 
-Each criterion gets a `tests/` directory with small, purpose-built files that contain known violations and known clean code.
+### Always include a clean fixture
 
-```
-deskcheck/
-├── criteria/
-│   └── backend/
-│       └── controller-conventions.md
-└── tests/
-    └── backend/
-        └── controller-conventions/
-            ├── violations.php          # Has specific, known violations
-            ├── clean.php               # Passes all checks — should produce 0 findings
-            └── expected.md             # Documents what SHOULD be found in violations.php
-```
+A clean file that follows all conventions should produce zero findings. This verifies the criterion doesn't over-fire on compliant code.
 
-### The `expected.md` File
+---
 
-Human-written document that describes what the criterion should find. Not an exact match — a checklist for evaluating the run.
+## Intermittent Issues
 
-```markdown
-# Expected Results: controller-conventions
+### Executor output truncation
 
-## violations.php
+When the executor produces many findings with long suggestions, the JSON output can get cut off mid-string, causing parse failures. The judge then reports 0% recall because it received no findings.
 
-Should find:
-- [ ] Line 12: missing return type on `store()` → warning
-- [ ] Line 18: `request()` helper instead of injected Request → info
-- [ ] Line 25: raw array in Inertia::render instead of Props Data class → warning
+**Mitigation:** Keep expectations focused on the key violations. Fewer, more important expectations are more resilient than many granular ones.
 
-Should NOT find:
-- [ ] Anything about the try-catch pattern (not in criterion scope)
-- [ ] Anything about parameter ordering (not in criterion scope)
-- [ ] Anything about code duplication (not in criterion scope)
+### Non-determinism
 
-## clean.php
-
-Should produce: 0 findings
-```
-
-### The Test Workflow
-
-```bash
-# 1. Run criterion against its violation fixture
-deskcheck "review deskcheck/tests/backend/controller-conventions/violations.php" \
-  --criteria=controller-conventions
-
-# 2. Run criterion against its clean fixture
-deskcheck "review deskcheck/tests/backend/controller-conventions/clean.php" \
-  --criteria=controller-conventions
-
-# 3. Compare output against expected.md manually (or with an LLM judge)
-```
-
-### Why Synthetic Files?
-
-- **Stable** — test fixtures don't change when the real codebase changes
-- **Isolated** — each criterion is tested independently
-- **Portable** — ship with the criterion, work in any project
-- **Documented** — the fixture IS the specification of what the criterion catches
-- **Fast** — small files = small context = fast executor runs
-
-### Writing Good Test Fixtures
-
-**violations.php should:**
-- Be minimal — only enough code to trigger the violations
-- Have ONE clear violation per check in the criterion
-- Include comments marking each intentional violation: `// VIOLATION: missing return type`
-- Be a realistic-looking file, not contrived gibberish
-
-**clean.php should:**
-- Follow all conventions the criterion checks for
-- Be roughly the same structure as violations.php (same class, similar methods)
-- Prove the criterion doesn't over-fire on compliant code
-
-### Future: Automated Evaluation
-
-Once we have enough data, we could build a `deskcheck test` command that:
-1. Runs each criterion against its fixtures
-2. Uses an LLM judge to compare findings against `expected.md`
-3. Reports pass/fail per criterion
-
-But start manual. Get the fixtures right first, automate later.
+Criteria are prompts. Results vary between runs. A test might pass 9/10 times. This is expected. The test infrastructure gives you a way to detect and fix common failure modes, not guarantee deterministic output.

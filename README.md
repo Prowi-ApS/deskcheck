@@ -101,13 +101,15 @@ Results are grouped by file, criterion, and severity. You can browse them in the
 Deterministic review of git changes. No LLM planner — passes args directly to `git diff`.
 
 ```bash
-deskcheck diff main                       # Changes vs main
-deskcheck diff --staged                   # Staged changes only
-deskcheck diff HEAD~3                     # Last 3 commits
-deskcheck diff main -- src/services/      # Scoped to a directory
-deskcheck diff main --dry-run             # Preview plan without executing
-deskcheck diff main --fail-on=critical    # Exit 1 if critical findings (for CI)
-deskcheck diff main --format=markdown     # Markdown output (for PR comments)
+deskcheck diff main                                      # Changes vs main
+deskcheck diff --staged                                  # Staged changes only
+deskcheck diff HEAD~3                                    # Last 3 commits
+deskcheck diff main -- src/services/                     # Scoped to a directory
+deskcheck diff main --dry-run                            # Preview plan without executing
+deskcheck diff main --fail-on=critical                   # Exit 1 if critical findings (for CI)
+deskcheck diff main --format=markdown                    # Markdown output (for PR comments)
+deskcheck diff main --criteria=dto-enforcement           # Only run one criterion
+deskcheck diff main --criteria=security,naming           # Only run specific criteria
 ```
 
 ### `deskcheck "<prompt>"`
@@ -148,6 +150,24 @@ Live terminal tree view of a run in progress.
 
 List all runs with status and finding counts.
 
+### `deskcheck test [criterion-name]`
+
+Run criteria against test fixtures to verify they produce correct findings.
+
+```bash
+deskcheck test                                    # Run all criterion tests
+deskcheck test controller-conventions             # Run tests for one criterion
+deskcheck test --criteria=dto-enforcement,naming  # Run tests for specific criteria
+```
+
+Test fixtures live in `deskcheck/tests/` mirroring the criteria directory structure. Each test case has a fixture file (code to review) and an `expected.md` (what should be found). An LLM judge compares actual findings against expectations and produces scores:
+
+- **Recall** — Were expected violations found?
+- **Precision** — Were all findings legitimate?
+- **Scope compliance** — Did every finding come from the criterion's checklist?
+
+Results are persisted in `.deskcheck/test-runs/` for inspection.
+
 ### `deskcheck init`
 
 Scaffold config and criteria directory for a new project.
@@ -180,11 +200,15 @@ The dashboard uses SSE for live updates — watch tasks complete in real time du
 
 ### Choosing the Right Model
 
+**The model is the most important decision in a criterion.** Wrong model choice produces either false positives (freelancing) or false negatives (overcorrection).
+
 | Use Case | Model | Why |
 |----------|-------|-----|
-| Simple patterns (naming, imports, console.log) | `haiku` | Fast and cheap |
-| Architectural judgment (separation of concerns, DTOs) | `sonnet` | Good reasoning at moderate cost |
-| Security analysis, complex data flow | `opus` | Deep analysis for high-stakes checks |
+| Purely mechanical pattern matching ("does X exist?") | `haiku` | Fast and cheap — but can't handle exclusion rules |
+| **Most criteria** — judgment required, has "What NOT to Check" | **`sonnet`** | **Use this by default.** Good reasoning, follows complex instructions |
+| Complex multi-step reasoning, cross-file analysis | `opus` | Deep analysis for architectural assessment |
+
+**If your criterion has a "What NOT to Check" section, do NOT use haiku.** In testing, haiku with exclusion rules either freelanced wildly (8/9 false positives) or overcorrected to zero findings. Sonnet produced 15/15 legitimate findings on the same criterion.
 
 ### The Detective Prompt
 
@@ -209,6 +233,7 @@ Configuration lives in `.deskcheck/config.json` (created by `deskcheck init`):
 {
   "modules_dir": "deskcheck/criteria",
   "storage_dir": ".deskcheck/runs",
+  "tests_dir": "deskcheck/tests",
   "shared": {
     "allowed_tools": ["Read", "Glob", "Grep"],
     "mcp_servers": {}
@@ -216,12 +241,14 @@ Configuration lives in `.deskcheck/config.json` (created by `deskcheck init`):
   "agents": {
     "planner": { "model": "haiku" },
     "executor": {},
-    "evaluator": { "model": "haiku" }
+    "evaluator": { "model": "haiku" },
+    "judge": { "model": "opus" }
   }
 }
 ```
 
-The executor **model** comes from each criterion's `model` field, not from config. This lets cheap checks use `haiku` and important checks use `sonnet`.
+- The **executor model** comes from each criterion's `model` field, not from config. This lets cheap checks use `haiku` and important checks use `sonnet`.
+- The **judge model** (used by `deskcheck test`) defaults to `opus` for accurate evaluation of findings against expectations.
 
 ## CI Integration
 
