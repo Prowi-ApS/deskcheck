@@ -1,5 +1,5 @@
-import type { ReviewPlan, ReviewResults } from "../types/review.js";
-import { groupFindingsBySeveritySection } from "./shared.js";
+import type { ReviewPlan, ReviewResults } from "../../types/review.js";
+import { groupFindingsBySeveritySection } from "../shared.js";
 
 /** Render review results as markdown suitable for PR comments. */
 export function renderMarkdown(

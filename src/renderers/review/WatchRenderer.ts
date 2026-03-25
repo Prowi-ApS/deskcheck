@@ -1,4 +1,4 @@
-import type { ReviewPlan, ReviewResults, TaskStatus } from "../types/review.js";
+import type { ReviewPlan, ReviewResults, TaskStatus } from "../../types/review.js";
 
 // ANSI codes
 const RESET = "\x1b[0m";

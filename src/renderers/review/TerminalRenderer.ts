@@ -1,5 +1,5 @@
-import type { ReviewPlan, ReviewResults, FindingSeverity } from "../types/review.js";
-import { groupFindingsBySeveritySection } from "./shared.js";
+import type { ReviewPlan, ReviewResults, FindingSeverity } from "../../types/review.js";
+import { groupFindingsBySeveritySection } from "../shared.js";
 
 // ANSI color codes
 const RESET = "\x1b[0m";

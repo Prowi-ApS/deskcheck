@@ -1,4 +1,4 @@
-import type { ReviewResults } from "../types/review.js";
+import type { ReviewResults } from "../../types/review.js";
 
 /** Render review results as formatted JSON. */
 export function renderJson(results: ReviewResults): string {

@@ -9,11 +9,11 @@ import { discoverModules, filterModules } from "./services/criteria/module-parse
 import { buildPlanWithTasks } from "./services/review/ReviewPlanBuilderService.js";
 import { ReviewPlannerService } from "./services/review/ReviewPlannerService.js";
 import { ReviewOrchestratorService } from "./services/review/ReviewOrchestratorService.js";
-import { renderTerminal } from "./renderers/terminal.js";
-import { renderMarkdown } from "./renderers/markdown.js";
-import { renderJson } from "./renderers/json.js";
-import { renderWatch } from "./renderers/watch.js";
-import { startServer } from "./serve.js";
+import { renderTerminal } from "./renderers/review/TerminalRenderer.js";
+import { renderMarkdown } from "./renderers/review/MarkdownRenderer.js";
+import { renderJson } from "./renderers/review/JsonRenderer.js";
+import { renderWatch } from "./renderers/review/WatchRenderer.js";
+import { startServer } from "./server/server.js";
 import type { ReviewResults, ReviewPlan, FindingSeverity } from "./types/review.js";
 
 // =============================================================================
