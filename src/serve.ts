@@ -2,7 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
-import { ReviewStorage } from "./core/storage.js";
+import { ReviewStorageService } from "./services/review/ReviewStorageService.js";
 import type { ReviewConfig } from "./config/types.js";
 import type { ReviewResults } from "./types/review.js";
 
@@ -57,7 +57,7 @@ function sendError(res: http.ServerResponse, status: number, message: string): v
 // Route handlers
 // =============================================================================
 
-function handleGetRuns(storage: ReviewStorage, res: http.ServerResponse): void {
+function handleGetRuns(storage: ReviewStorageService, res: http.ServerResponse): void {
   const plans = storage.listPlans();
   const runs: RunSummary[] = plans.map((planSummary) => {
     let summary: ReviewResults["summary"] | null = null;
@@ -113,7 +113,7 @@ function handleGetRuns(storage: ReviewStorage, res: http.ServerResponse): void {
   sendJson(res, runs);
 }
 
-function handleGetPlan(storage: ReviewStorage, res: http.ServerResponse, planId: string): void {
+function handleGetPlan(storage: ReviewStorageService, res: http.ServerResponse, planId: string): void {
   try {
     const plan = storage.getPlan(planId);
     sendJson(res, plan);
@@ -122,7 +122,7 @@ function handleGetPlan(storage: ReviewStorage, res: http.ServerResponse, planId:
   }
 }
 
-function handleGetResults(storage: ReviewStorage, res: http.ServerResponse, planId: string): void {
+function handleGetResults(storage: ReviewStorageService, res: http.ServerResponse, planId: string): void {
   try {
     const results = storage.getResults(planId);
     sendJson(res, results);
@@ -233,7 +233,7 @@ function parseSegments(pathname: string): string[] {
  */
 export function startServer(config: ReviewConfig, projectRoot: string, port: number): void {
   const storageDir = path.join(projectRoot, config.storage_dir);
-  const storage = new ReviewStorage(storageDir);
+  const storage = new ReviewStorageService(storageDir);
   const uiHtmlPath = path.resolve(
     path.dirname(new URL(import.meta.url).pathname),
     "../ui/dist/index.html",

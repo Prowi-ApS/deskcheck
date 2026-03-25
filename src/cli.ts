@@ -4,11 +4,11 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { Command } from "commander";
 import { loadConfig, DEFAULT_CONFIG } from "./config/loader.js";
-import { ReviewStorage } from "./core/storage.js";
-import { discoverModules, filterModules } from "./core/module-parser.js";
-import { buildPlanWithTasks } from "./core/plan-builder.js";
-import { ReviewPlanner } from "./agents/planner.js";
-import { ReviewOrchestrator } from "./agents/orchestrator.js";
+import { ReviewStorageService } from "./services/review/ReviewStorageService.js";
+import { discoverModules, filterModules } from "./services/criteria/module-parser.js";
+import { buildPlanWithTasks } from "./services/review/ReviewPlanBuilderService.js";
+import { ReviewPlannerService } from "./services/review/ReviewPlannerService.js";
+import { ReviewOrchestratorService } from "./services/review/ReviewOrchestratorService.js";
 import { renderTerminal } from "./renderers/terminal.js";
 import { renderMarkdown } from "./renderers/markdown.js";
 import { renderJson } from "./renderers/json.js";
@@ -80,7 +80,7 @@ function renderOutput(results: ReviewResults, plan: ReviewPlan, format: string):
 
 /** Print execution progress from orchestrator events. */
 async function executeAndPrint(
-  orchestrator: ReviewOrchestrator,
+  orchestrator: ReviewOrchestratorService,
   planId: string,
 ): Promise<void> {
   console.log(`${DIM}  Checking...${RESET}`);
@@ -175,7 +175,7 @@ function initCommand(): void {
 function listCommand(): void {
   const projectRoot = resolveProjectRoot();
   const config = loadConfig(projectRoot);
-  const storage = new ReviewStorage(path.join(projectRoot, config.storage_dir));
+  const storage = new ReviewStorageService(path.join(projectRoot, config.storage_dir));
 
   const plans = storage.listPlans();
 
@@ -205,7 +205,7 @@ function listCommand(): void {
 function showCommand(id: string | undefined, options: { format: string; failOn?: string }): void {
   const projectRoot = resolveProjectRoot();
   const config = loadConfig(projectRoot);
-  const storage = new ReviewStorage(path.join(projectRoot, config.storage_dir));
+  const storage = new ReviewStorageService(path.join(projectRoot, config.storage_dir));
 
   const planId = id ?? storage.getLatestPlanId();
   if (!planId) {
@@ -238,7 +238,7 @@ async function diffCommand(
   const projectRoot = resolveProjectRoot();
   const config = loadConfig(projectRoot);
   const storageDir = path.join(projectRoot, config.storage_dir);
-  const storage = new ReviewStorage(storageDir);
+  const storage = new ReviewStorageService(storageDir);
 
   // Get changed files via git diff
   // Insert --name-only right after "diff" so it comes before any -- path separators
@@ -294,7 +294,7 @@ async function diffCommand(
   }
 
   // Execute
-  const orchestrator = new ReviewOrchestrator(config, projectRoot);
+  const orchestrator = new ReviewOrchestratorService(config, projectRoot);
   await executeAndPrint(orchestrator, plan.plan_id);
 
   // Render results
@@ -317,17 +317,17 @@ async function deskchecCommand(
   const criteriaFilter = options.criteria
     ? options.criteria.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
     : undefined;
-  const planner = new ReviewPlanner(config, projectRoot);
+  const planner = new ReviewPlannerService(config, projectRoot);
   const plan = await planner.plan(prompt, criteriaFilter);
 
   printPlanSummary(plan);
 
   // Execute
-  const orchestrator = new ReviewOrchestrator(config, projectRoot);
+  const orchestrator = new ReviewOrchestratorService(config, projectRoot);
   await executeAndPrint(orchestrator, plan.plan_id);
 
   // Render results
-  const storage = new ReviewStorage(storageDir);
+  const storage = new ReviewStorageService(storageDir);
   const finalPlan = storage.getPlan(plan.plan_id);
   const results = storage.getResults(plan.plan_id);
   console.log(renderTerminal(results, finalPlan));
@@ -338,7 +338,7 @@ async function deskchecCommand(
 async function watchCommand(planId?: string): Promise<void> {
   const projectRoot = resolveProjectRoot();
   const config = loadConfig(projectRoot);
-  const storage = new ReviewStorage(path.join(projectRoot, config.storage_dir));
+  const storage = new ReviewStorageService(path.join(projectRoot, config.storage_dir));
 
   const resolvedId = planId ?? storage.getLatestPlanId();
   if (!resolvedId) {

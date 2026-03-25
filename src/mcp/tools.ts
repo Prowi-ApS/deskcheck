@@ -4,10 +4,10 @@ import { z } from "zod";
 import type { ReviewConfig } from "../config/types.js";
 import type { Finding } from "../types/review.js";
 import type { AgentModel } from "../types/criteria.js";
-import { ReviewStorage } from "../core/storage.js";
-import { extractContext } from "../core/context-extractor.js";
-import { discoverModules, parseModule } from "../core/module-parser.js";
-import { findMatchingModules } from "../core/glob-matcher.js";
+import { ReviewStorageService } from "../services/review/ReviewStorageService.js";
+import { extractContext } from "../services/review/ReviewContextExtractorService.js";
+import { discoverModules, parseModule } from "../services/criteria/module-parser.js";
+import { findMatchingModules } from "../services/criteria/glob-matcher.js";
 
 /**
  * Register all review MCP tools on the given server.
@@ -20,7 +20,7 @@ export function registerReviewTools(
   config: ReviewConfig,
   projectRoot: string,
 ): void {
-  const storage = new ReviewStorage(
+  const storage = new ReviewStorageService(
     path.resolve(projectRoot, config.storage_dir),
   );
   const modulesDir = path.resolve(projectRoot, config.modules_dir);

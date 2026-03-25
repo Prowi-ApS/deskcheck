@@ -2,11 +2,12 @@ import path from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
-import { discoverModules, filterModules } from "../core/module-parser.js";
-import { buildPlanWithTasks } from "../core/plan-builder.js";
-import { ReviewStorage } from "../core/storage.js";
-import type { ReviewConfig } from "../config/types.js";
-import type { ReviewPlan } from "../types/review.js";
+import { discoverModules, filterModules } from "../criteria/module-parser.js";
+import { buildPlanWithTasks } from "./ReviewPlanBuilderService.js";
+import { ReviewStorageService } from "./ReviewStorageService.js";
+import { buildPlannerPrompt } from "../../prompts/PlannerPrompt.js";
+import type { ReviewConfig } from "../../config/types.js";
+import type { ReviewPlan } from "../../types/review.js";
 
 /**
  * Plans review tasks by delegating intent detection to an Agent SDK agent.
@@ -16,7 +17,7 @@ import type { ReviewPlan } from "../types/review.js";
  * tools. The agent interprets what the user wants to review and creates the
  * plan accordingly.
  */
-export class ReviewPlanner {
+export class ReviewPlannerService {
   private readonly config: ReviewConfig;
   private readonly projectRoot: string;
 
@@ -39,7 +40,7 @@ export class ReviewPlanner {
    */
   async plan(input: string, criteriaFilter?: string[]): Promise<ReviewPlan> {
     const storageDir = path.resolve(this.projectRoot, this.config.storage_dir);
-    const storage = new ReviewStorage(storageDir);
+    const storage = new ReviewStorageService(storageDir);
     const modulesDir = path.resolve(this.projectRoot, this.config.modules_dir);
     let modules = discoverModules(modulesDir);
 
@@ -98,27 +99,7 @@ export class ReviewPlanner {
     // The Agent SDK resolves these to full model IDs internally
     const plannerModel = this.config.agents.planner.model ?? "haiku";
 
-    const systemPrompt = `You are a deskcheck planner. The user will tell you what they want to check. Your job is to figure out which files are involved and call the create_plan tool.
-
-## Available Criteria
-
-${moduleDescriptions}
-
-## How to Determine Files
-
-- If the user mentions a **directory** (e.g., "everything in app/Services/"): use Bash to list all files recursively: \`find <path> -type f -name "*.php" -o -name "*.ts" -o -name "*.vue"\` or similar. Then pass ALL those file paths to create_plan.
-- If the user mentions a **branch** or "changes" or "diff": run \`git diff <branch> --name-only\` to get changed files.
-- If the user mentions a **specific file**: use that file path directly.
-- If the user mentions a **function/method name** and a file: use the file path, set source_type to "symbol".
-- If the user is vague: use Bash to explore the filesystem and figure out what files are relevant.
-
-## What to Do
-
-1. Figure out which files to check (use Bash to run commands like find, ls, git diff)
-2. Call the create_plan tool with the file list and appropriate source type (use "file" for directory/file reviews, "diff" for branch comparisons)
-3. Report what you created
-
-You MUST call the create_plan tool. Do NOT review code yourself. Your only job is to determine the file list and call create_plan.`;
+    const systemPrompt = buildPlannerPrompt(moduleDescriptions);
 
     // Spawn the planner agent with a 5-minute timeout
     const abortController = new AbortController();

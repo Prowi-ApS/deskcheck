@@ -13,7 +13,7 @@ import type {
   TaskResult,
   TaskUsage,
   TotalUsage,
-} from "../types/review.js";
+} from "../../types/review.js";
 
 // =============================================================================
 // Helpers
@@ -48,7 +48,7 @@ const LOCK_MAX_WAIT_MS = 10_000;
 const LOCK_SPIN_MS = 50;
 
 // =============================================================================
-// ReviewStorage
+// ReviewStorageService
 // =============================================================================
 
 /**
@@ -58,7 +58,7 @@ const LOCK_SPIN_MS = 50;
  * directory. The plan file tracks tasks and coverage; the results file tracks
  * findings and aggregations.
  */
-export class ReviewStorage {
+export class ReviewStorageService {
   private readonly storageDir: string;
 
   /** Tracks active lock file paths so they can be cleaned up on process exit. */
@@ -66,7 +66,7 @@ export class ReviewStorage {
 
   static {
     const cleanup = (): void => {
-      for (const lockPath of ReviewStorage.activeLocks) {
+      for (const lockPath of ReviewStorageService.activeLocks) {
         try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
       }
     };
@@ -131,11 +131,11 @@ export class ReviewStorage {
       }
     }
 
-    ReviewStorage.activeLocks.add(lockPath);
+    ReviewStorageService.activeLocks.add(lockPath);
     try {
       return fn();
     } finally {
-      ReviewStorage.activeLocks.delete(lockPath);
+      ReviewStorageService.activeLocks.delete(lockPath);
       try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
     }
   }

@@ -10,9 +10,9 @@ export {
   discoverModules as discoverCriteria,
   filterModules as filterCriteria,
   parseModule as parseCriterion,
-} from "../core/module-parser.js";
+} from "./module-parser.js";
 
 export {
   findMatchingModules as matchFiles,
   fileMatchesGlobs,
-} from "../core/glob-matcher.js";
+} from "./glob-matcher.js";

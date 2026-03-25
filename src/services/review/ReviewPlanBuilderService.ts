@@ -1,11 +1,11 @@
-import { findMatchingModules } from "./glob-matcher.js";
-import { ReviewStorage } from "./storage.js";
-import type { ReviewModule } from "../types/criteria.js";
+import { findMatchingModules } from "../criteria/glob-matcher.js";
+import { ReviewStorageService } from "./ReviewStorageService.js";
+import type { ReviewModule } from "../../types/criteria.js";
 import type {
   ModuleSummary,
   ReviewPlan,
   ReviewSource,
-} from "../types/review.js";
+} from "../../types/review.js";
 
 /**
  * Build a complete review plan: create the plan, match files to modules,
@@ -16,7 +16,7 @@ import type {
  * entry point that needs to create a plan from a file list.
  */
 export function buildPlanWithTasks(
-  storage: ReviewStorage,
+  storage: ReviewStorageService,
   name: string,
   source: ReviewSource,
   files: string[],
