@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import type { ReviewConfig } from "../../config/types.js";
-import type { TestCase, TestRun } from "../../types/testing.js";
+import type { TestCase, TestCaseResult, TestRun } from "../../types/testing.js";
 import type { ReviewTask } from "../../types/review.js";
 import { ExecutorService } from "../ExecutorService.js";
 import { buildExecutorPrompt } from "../../prompts/ExecutorPrompt.js";
@@ -9,6 +9,16 @@ import { parseCriterion } from "../criteria/CriteriaService.js";
 import { TestStorageService } from "./TestStorageService.js";
 import { JudgeService } from "./JudgeService.js";
 import { calculateScores } from "./TestScorerService.js";
+
+// =============================================================================
+// Types
+// =============================================================================
+
+/** Options for controlling test run behavior. */
+export interface TestRunOptions {
+  /** Called after each test case completes (or errors), for live progress reporting. */
+  onTestComplete?: (criterionId: string, testName: string, result: TestCaseResult) => void;
+}
 
 // =============================================================================
 // TestRunnerService
@@ -37,11 +47,13 @@ export class TestRunnerService {
    *
    * @param testCases - Discovered test cases to execute.
    * @param storageDir - Directory where test run results are persisted.
+   * @param options - Optional callbacks for progress reporting.
    * @returns The final TestRun with all results.
    */
   async run(
     testCases: TestCase[],
     storageDir: string,
+    options?: TestRunOptions,
   ): Promise<TestRun> {
     const storage = new TestStorageService(storageDir);
     const executorService = new ExecutorService(this.config, this.projectRoot);
@@ -76,6 +88,15 @@ export class TestRunnerService {
           status: "error",
           error: errorMessage,
         });
+      }
+
+      // Notify caller of test completion (whether success or error)
+      if (options?.onTestComplete) {
+        const currentRun = storage.getRun(runId);
+        const result = currentRun.suites[testCase.criterionId]?.tests[testCase.name];
+        if (result) {
+          options.onTestComplete(testCase.criterionId, testCase.name, result);
+        }
       }
     }
 

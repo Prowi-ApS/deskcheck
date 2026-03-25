@@ -14,7 +14,11 @@ import { renderMarkdown } from "./renderers/review/MarkdownRenderer.js";
 import { renderJson } from "./renderers/review/JsonRenderer.js";
 import { renderWatch } from "./renderers/review/WatchRenderer.js";
 import { startServer } from "./server/server.js";
+import { discoverTests } from "./services/testing/TestDiscoveryService.js";
+import { TestRunnerService } from "./services/testing/TestRunnerService.js";
+import { renderTestResults } from "./renderers/test/TerminalRenderer.js";
 import type { ReviewResults, ReviewPlan, FindingSeverity } from "./types/review.js";
+import type { TestCaseResult } from "./types/testing.js";
 
 // =============================================================================
 // ANSI helpers
@@ -392,6 +396,69 @@ async function watchCommand(planId?: string): Promise<void> {
   });
 }
 
+/** `deskcheck test [criterion-name]` */
+async function testCommand(
+  criterionName: string | undefined,
+  options: { criteria?: string },
+): Promise<void> {
+  const projectRoot = resolveProjectRoot();
+  const config = loadConfig(projectRoot);
+  const testsDir = path.resolve(projectRoot, config.tests_dir);
+  const criteriaDir = path.resolve(projectRoot, config.modules_dir);
+  const storageDir = path.join(projectRoot, config.storage_dir, "../test-runs");
+
+  // Parse criteria filter from positional argument or --criteria option
+  let criteriaFilter: string[] | undefined;
+  if (criterionName) {
+    criteriaFilter = [criterionName];
+  } else if (options.criteria) {
+    criteriaFilter = options.criteria.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+  }
+
+  // Discover test cases
+  const testCases = discoverTests(testsDir, criteriaDir, criteriaFilter);
+
+  if (testCases.length === 0) {
+    console.log("No test cases found.");
+    return;
+  }
+
+  // Count unique criteria
+  const uniqueCriteria = new Set(testCases.map((tc) => tc.criterionId));
+  console.log("");
+  console.log(`${DIM}  Discovered ${testCases.length} test case${testCases.length !== 1 ? "s" : ""} for ${uniqueCriteria.size} criteria${RESET}`);
+  console.log("");
+
+  // Run tests with progress callback
+  const runner = new TestRunnerService(config, projectRoot);
+  let completed = 0;
+
+  const run = await runner.run(testCases, storageDir, {
+    onTestComplete: (criterionId: string, testName: string, result: TestCaseResult) => {
+      completed++;
+      const isComplete = result.status === "complete";
+      const isError = result.status === "error";
+
+      if (isError) {
+        console.log(`${RED}  \u2717 ${criterionId}/${testName}${RESET} ${DIM}(error)${RESET}`);
+      } else if (isComplete && result.scores) {
+        const passing = result.scores.recall >= 0.8 && result.scores.precision >= 0.8 && result.scores.scope_compliance >= 0.8;
+        const icon = passing ? `${GREEN}\u2713` : `${YELLOW}\u25B2`;
+        const recall = Math.round(result.scores.recall * 100);
+        const precision = Math.round(result.scores.precision * 100);
+        console.log(`${icon} ${criterionId}/${testName}${RESET} ${DIM}(recall: ${recall}%, precision: ${precision}%)${RESET}`);
+      } else {
+        console.log(`${DIM}  \u25CB ${criterionId}/${testName} (${result.status})${RESET}`);
+      }
+    },
+  });
+
+  console.log("");
+
+  // Render final detailed results
+  console.log(renderTestResults(run));
+}
+
 // =============================================================================
 // Program
 // =============================================================================
@@ -515,6 +582,27 @@ program
       const config = loadConfig(projectRoot);
       const port = options.port ? parseInt(options.port, 10) : config.serve_port;
       startServer(config, projectRoot, port);
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+// Subcommand: test
+program
+  .command("test")
+  .description("Run criterion tests against fixture files")
+  .argument("[criterion-name]", "Only run tests for this criterion")
+  .option("--criteria <names>", "Only run specific criteria (comma-separated)")
+  .addHelpText("after", `
+Examples:
+  deskcheck test                                    Run all criterion tests
+  deskcheck test backend/controller-conventions     Run tests for one criterion
+  deskcheck test --criteria=dto-enforcement,naming  Run tests for specific criteria
+  `)
+  .action(async (criterionName: string | undefined, options: { criteria?: string }) => {
+    try {
+      await testCommand(criterionName, options);
     } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
