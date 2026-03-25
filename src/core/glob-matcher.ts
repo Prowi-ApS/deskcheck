@@ -1,5 +1,5 @@
 import { minimatch } from "minimatch";
-import type { ReviewModule } from "./types.js";
+import type { ReviewModule } from "../types/criteria.js";
 
 /** The result of matching changed files against a single criterion. */
 export interface MatchResult {

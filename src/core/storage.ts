@@ -13,7 +13,7 @@ import type {
   TaskResult,
   TaskUsage,
   TotalUsage,
-} from "./types.js";
+} from "../types/review.js";
 
 // =============================================================================
 // Helpers

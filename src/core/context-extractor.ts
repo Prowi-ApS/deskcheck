@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import type { ContextType } from "./types.js";
+import type { ContextType } from "../types/review.js";
 
 /** The result of extracting review context for a task. */
 export interface ExtractedContext {

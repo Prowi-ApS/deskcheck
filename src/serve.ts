@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
 import { ReviewStorage } from "./core/storage.js";
-import type { ReviewConfig, ReviewResults } from "./core/types.js";
+import type { ReviewConfig } from "./config/types.js";
+import type { ReviewResults } from "./types/review.js";
 
 // =============================================================================
 // Types

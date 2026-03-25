@@ -6,6 +6,7 @@ import type { ReviewConfig } from "./types.js";
 export const DEFAULT_CONFIG: ReviewConfig = {
   modules_dir: "deskcheck/criteria",
   storage_dir: ".deskcheck/runs",
+  tests_dir: "deskcheck/tests",
   serve_port: 3000,
   shared: {
     allowed_tools: ["Read", "Glob", "Grep"],
@@ -25,7 +26,7 @@ export const DEFAULT_CONFIG: ReviewConfig = {
  * override defaults while missing nested fields retain their defaults.
  * For all other types (strings, arrays, primitives), the user value wins outright.
  */
-function deepMerge<T>(defaults: T, overrides: Partial<T>): T {
+export function deepMerge<T>(defaults: T, overrides: Partial<T>): T {
   if (
     typeof defaults !== "object" ||
     defaults === null ||

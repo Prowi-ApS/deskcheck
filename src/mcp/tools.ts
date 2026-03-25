@@ -1,7 +1,9 @@
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ReviewConfig, AgentModel, Finding } from "../core/types.js";
+import type { ReviewConfig } from "../config/types.js";
+import type { Finding } from "../types/review.js";
+import type { AgentModel } from "../types/criteria.js";
 import { ReviewStorage } from "../core/storage.js";
 import { extractContext } from "../core/context-extractor.js";
 import { discoverModules, parseModule } from "../core/module-parser.js";

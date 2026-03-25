@@ -1,11 +1,11 @@
 import { findMatchingModules } from "./glob-matcher.js";
 import { ReviewStorage } from "./storage.js";
+import type { ReviewModule } from "../types/criteria.js";
 import type {
   ModuleSummary,
-  ReviewModule,
   ReviewPlan,
   ReviewSource,
-} from "./types.js";
+} from "../types/review.js";
 
 /**
  * Build a complete review plan: create the plan, match files to modules,

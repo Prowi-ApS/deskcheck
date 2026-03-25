@@ -1,4 +1,4 @@
-import type { ReviewPlan, ReviewResults, FindingSeverity } from "../core/types.js";
+import type { ReviewPlan, ReviewResults, FindingSeverity } from "../types/review.js";
 import { groupFindingsBySeveritySection } from "./shared.js";
 
 // ANSI color codes

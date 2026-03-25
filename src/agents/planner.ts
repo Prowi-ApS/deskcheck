@@ -5,7 +5,8 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { discoverModules, filterModules } from "../core/module-parser.js";
 import { buildPlanWithTasks } from "../core/plan-builder.js";
 import { ReviewStorage } from "../core/storage.js";
-import type { ReviewConfig, ReviewPlan } from "../core/types.js";
+import type { ReviewConfig } from "../config/types.js";
+import type { ReviewPlan } from "../types/review.js";
 
 /**
  * Plans review tasks by delegating intent detection to an Agent SDK agent.

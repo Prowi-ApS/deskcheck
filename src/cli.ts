@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { Command } from "commander";
-import { loadConfig, DEFAULT_CONFIG } from "./core/config.js";
+import { loadConfig, DEFAULT_CONFIG } from "./config/loader.js";
 import { ReviewStorage } from "./core/storage.js";
 import { discoverModules, filterModules } from "./core/module-parser.js";
 import { buildPlanWithTasks } from "./core/plan-builder.js";
@@ -14,7 +14,7 @@ import { renderMarkdown } from "./renderers/markdown.js";
 import { renderJson } from "./renderers/json.js";
 import { renderWatch } from "./renderers/watch.js";
 import { startServer } from "./serve.js";
-import type { ReviewResults, ReviewPlan, FindingSeverity } from "./core/types.js";
+import type { ReviewResults, ReviewPlan, FindingSeverity } from "./types/review.js";
 
 // =============================================================================
 // ANSI helpers

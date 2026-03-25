@@ -1,15 +1,11 @@
+import type { AgentModel, ModuleSeverity } from "./criteria.js";
+
 // =============================================================================
 // Common Union Types
 // =============================================================================
 
-/** Severity level assigned to a criterion (how important it is). */
-export type ModuleSeverity = "critical" | "high" | "medium" | "low";
-
 /** Severity level assigned to an individual finding. */
 export type FindingSeverity = "critical" | "warning" | "info";
-
-/** Claude model tier used for agent execution. */
-export type AgentModel = "haiku" | "sonnet" | "opus";
 
 /** How the source content is provided to executors. */
 export type ContextType = "diff" | "file" | "symbol";
@@ -22,77 +18,6 @@ export type TaskStatus = "pending" | "in_progress" | "complete" | "error";
 
 /** Whether results cover all tasks or only a subset. */
 export type ResultsStatus = "partial" | "complete";
-
-// =============================================================================
-// Criterion Types (parsed from criterion markdown files)
-// =============================================================================
-
-/** A criterion parsed from a markdown file in the criteria directory. */
-export interface ReviewModule {
-  /** Unique identifier, e.g. "architecture/dto-enforcement". */
-  id: string;
-  /** Relative file path, e.g. "deskcheck/criteria/architecture/dto-enforcement.md". */
-  file: string;
-  /** Human-readable description from frontmatter. */
-  description: string;
-  /** How important this criterion's findings are. */
-  severity: ModuleSeverity;
-  /** File glob patterns that determine which files this criterion checks. */
-  globs: string[];
-  /** Natural language instruction for how to split files into tasks. */
-  mode: string;
-  /** Claude model tier to use for executor agents. */
-  model: AgentModel;
-  /** The detective prompt (markdown body of the criterion) given to executor agents. */
-  prompt: string;
-}
-
-// =============================================================================
-// Config Types (.deskcheck/config.json)
-// =============================================================================
-
-/** MCP server configuration for agent tool access. */
-export interface McpServerConfig {
-  /** Command to start the MCP server. */
-  command: string;
-  /** Command-line arguments. */
-  args?: string[];
-  /** Environment variables passed to the server process. */
-  env?: Record<string, string>;
-}
-
-/** Per-role agent configuration (planner, executor, evaluator). */
-export interface AgentRoleConfig {
-  /** Override the default model for this role. */
-  model?: AgentModel;
-  /** Additional tools beyond the shared set. */
-  additional_tools?: string[];
-  /** Additional MCP servers beyond the shared set. */
-  additional_mcp_servers?: Record<string, McpServerConfig>;
-}
-
-/** Top-level deskcheck tool configuration from .deskcheck/config.json. */
-export interface ReviewConfig {
-  /** Directory containing criterion markdown files. */
-  modules_dir: string;
-  /** Directory for storing deskcheck run results. */
-  storage_dir: string;
-  /** Port for the web UI server. Default: 3000. */
-  serve_port: number;
-  /** Shared configuration applied to all agent roles. */
-  shared: {
-    /** Tools available to all agents. */
-    allowed_tools: string[];
-    /** MCP servers available to all agents. */
-    mcp_servers: Record<string, McpServerConfig>;
-  };
-  /** Per-role agent configuration. */
-  agents: {
-    planner: AgentRoleConfig;
-    executor: AgentRoleConfig;
-    evaluator: AgentRoleConfig;
-  };
-}
 
 // =============================================================================
 // Storage Types — plan.json

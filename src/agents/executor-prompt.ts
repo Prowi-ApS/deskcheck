@@ -1,4 +1,4 @@
-import type { ReviewTask } from "../core/types.js";
+import type { ReviewTask } from "../types/review.js";
 
 /**
  * Build the system prompt for an executor agent.

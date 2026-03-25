@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerReviewTools } from "./mcp/tools.js";
-import { loadConfig } from "./core/config.js";
+import { loadConfig } from "./config/loader.js";
 
 const projectRoot = process.cwd();
 const config = loadConfig(projectRoot);

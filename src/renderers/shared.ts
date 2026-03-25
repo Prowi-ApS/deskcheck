@@ -1,4 +1,4 @@
-import type { Finding, FindingSeverity, ReviewResults } from "../core/types.js";
+import type { Finding, FindingSeverity, ReviewResults } from "../types/review.js";
 
 /** A finding tagged with the criterion that produced it. */
 export interface TaggedFinding {

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import type { AgentModel, ModuleSeverity, ReviewModule } from "./types.js";
+import type { AgentModel, ModuleSeverity, ReviewModule } from "../types/criteria.js";
 
 const VALID_SEVERITIES: ReadonlySet<string> = new Set<ModuleSeverity>([
   "critical",
