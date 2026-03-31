@@ -52,7 +52,7 @@ const fileCount = computed(() => {
 </template>
 
 <style scoped>
-.issue-card { padding: 1rem 1.25rem; background: var(--bg-card); border-radius: 6px; margin-bottom: 0.75rem; border-left: 4px solid transparent; }
+.issue-card { padding: 1rem 1.25rem; background: var(--bg-card); border-radius: 6px; margin-bottom: 0.6rem; border-left: 4px solid transparent; }
 .issue-card.severity-critical { border-left-color: var(--color-critical); }
 .issue-card.severity-warning { border-left-color: var(--color-warning); }
 .issue-card.severity-info { border-left-color: var(--color-info); }

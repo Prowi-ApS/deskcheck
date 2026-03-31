@@ -123,16 +123,16 @@ function onNavigateToFile(filePath: string) {
 <style scoped>
 .loading { text-align: center; padding: 2rem; color: var(--text-secondary); }
 
-.run-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 1.25rem 2rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
-.run-header-left { display: flex; align-items: flex-start; gap: 1rem; }
-.run-name { font-size: 1rem; font-weight: 600; margin: 0 0 0.25rem; }
+.run-header { padding: 1rem 2rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
+.run-header-left { max-width: 1100px; margin: 0 auto; }
+.run-name { font-size: 1rem; font-weight: 600; margin: 0.25rem 0 0.2rem; }
 .run-meta { display: flex; align-items: center; gap: 0.75rem; font-size: 0.75rem; color: var(--text-secondary); }
-.status-badge { padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.status-badge { padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
 .status-badge.complete { background: rgba(102, 187, 106, 0.2); color: var(--color-complete); }
 .status-badge.executing { background: rgba(171, 71, 188, 0.2); color: var(--color-running); }
 .status-badge.pending, .status-badge.planning, .status-badge.ready { background: rgba(90, 100, 120, 0.2); color: var(--text-muted); }
 .meta-sep { color: var(--text-muted); }
 .meta-sep::before { content: '\b7'; margin-right: 0.75rem; color: var(--border); }
-.back-btn { background: none; border: none; color: var(--accent); font-size: 0.85rem; cursor: pointer; padding: 0.25rem 0; }
-.back-btn:hover { text-decoration: underline; }
+.back-btn { background: none; border: none; color: var(--text-muted); font-size: 0.75rem; cursor: pointer; padding: 0; }
+.back-btn:hover { color: var(--accent); }
 </style>

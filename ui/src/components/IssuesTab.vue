@@ -83,9 +83,9 @@ const showGrouped = computed(() => grouped.value.length > 0)
 </template>
 
 <style scoped>
-.issues-tab { max-width: 1100px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+.issues-tab { max-width: 1100px; margin: 0 auto; padding: 1.25rem 2rem 3rem; }
 
-.issues-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+.issues-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
 
 .severity-filter { display: flex; gap: 0.35rem; }
 .filter-btn { padding: 0.375rem 0.75rem; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; display: flex; align-items: center; gap: 0.3rem; }
@@ -110,7 +110,7 @@ const showGrouped = computed(() => grouped.value.length > 0)
 .empty-clean-title { font-size: 1rem; font-weight: 600; color: var(--text-primary); }
 .empty-clean-text { font-size: 0.85rem; color: var(--text-secondary); }
 
-.issue-group { margin-bottom: 1.75rem; }
+.issue-group { margin-bottom: 2.5rem; }
 .group-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
 .group-name { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-secondary); }
 .group-header-critical .group-name { color: var(--color-critical); }
