@@ -104,7 +104,7 @@ function onNavigateToFile(filePath: string) {
           <h1 class="run-name">{{ plan.name }}</h1>
           <div class="run-meta">
             <span class="status-badge" :class="plan.status">{{ plan.status }}</span>
-            <span class="meta-sep">{{ plan.source.type }} vs {{ plan.source.target }}</span>
+            <span class="meta-sep">{{ plan.source.type === 'diff' ? `diff vs ${plan.source.target}` : plan.source.type === 'file' ? `reviewing files on ${plan.source.target}` : `${plan.source.type}: ${plan.source.target}` }}</span>
             <span v-if="runData.runDuration.value" class="meta-sep">{{ runData.runDuration.value }}</span>
           </div>
         </div>

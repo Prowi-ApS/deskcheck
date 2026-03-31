@@ -43,9 +43,9 @@ function fileName(): string {
         <h3 class="detail-filename">{{ fileName() }}</h3>
         <div class="detail-path">{{ filePath }}</div>
         <div class="detail-summary">
-          {{ counts.total }} issues
+          {{ counts.total }} {{ counts.total === 1 ? 'issue' : 'issues' }}
           <template v-if="counts.total !== totalCounts.total">({{ totalCounts.total }} total)</template>
-          from {{ criteriaCount }} criteria
+          from {{ criteriaCount }} {{ criteriaCount === 1 ? 'criterion' : 'criteria' }}
         </div>
       </div>
       <div class="detail-controls">
@@ -70,7 +70,7 @@ function fileName(): string {
     </div>
 
     <div v-if="fileIssues.length === 0 && totalCounts.total === 0" class="clean-state">
-      <p>Reviewed by {{ criteriaCount }} criteria — no issues found.</p>
+      <p>Reviewed by {{ criteriaCount }} {{ criteriaCount === 1 ? 'criterion' : 'criteria' }} — no issues found.</p>
       <ul v-if="criteria.length > 0" class="criteria-list">
         <li v-for="c in criteria" :key="c">{{ c.split('/').pop() }}</li>
       </ul>

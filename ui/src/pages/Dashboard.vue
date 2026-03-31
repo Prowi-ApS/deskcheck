@@ -43,7 +43,7 @@ onUnmounted(() => {
   <div class="dashboard">
     <div class="header">
       <h1>Deskcheck</h1>
-      <p class="subtitle">Code review runs</p>
+      <p class="subtitle">Your code reviews</p>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>

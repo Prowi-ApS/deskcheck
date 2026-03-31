@@ -35,8 +35,8 @@ function closeDetail() {
       <div class="file-list-panel">
         <div class="file-filter-bar">
           <button type="button" class="file-filter-btn" :class="{ active: data.fileFilter.value === 'all' }" @click="data.fileFilter.value = 'all'">All ({{ data.fileCounts.value.total }})</button>
-          <button type="button" class="file-filter-btn matched" :class="{ active: data.fileFilter.value === 'matched' }" @click="data.fileFilter.value = 'matched'">Matched ({{ data.fileCounts.value.matched }})</button>
-          <button type="button" class="file-filter-btn unmatched" :class="{ active: data.fileFilter.value === 'unmatched' }" @click="data.fileFilter.value = 'unmatched'">Not covered ({{ data.fileCounts.value.unmatched }})</button>
+          <button type="button" class="file-filter-btn matched" :class="{ active: data.fileFilter.value === 'matched' }" @click="data.fileFilter.value = 'matched'">Reviewed ({{ data.fileCounts.value.matched }})</button>
+          <button type="button" class="file-filter-btn unmatched" :class="{ active: data.fileFilter.value === 'unmatched' }" @click="data.fileFilter.value = 'unmatched'">No criteria ({{ data.fileCounts.value.unmatched }})</button>
         </div>
 
         <table class="file-table">

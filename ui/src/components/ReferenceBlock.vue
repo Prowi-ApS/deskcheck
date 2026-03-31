@@ -18,7 +18,7 @@ function copyPath(ref: Reference) {
     </div>
     <div v-if="reference.code && reference.suggestedCode" class="ref-diff">
       <div class="ref-diff-col current">
-        <div class="ref-diff-label">Current</div>
+        <div class="ref-diff-label">Current code</div>
         <pre><code>{{ reference.code }}</code></pre>
       </div>
       <div class="ref-diff-col suggested">

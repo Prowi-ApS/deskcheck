@@ -330,7 +330,7 @@ export function useRunData(
     }
     return Object.entries(groups).map(([key, items]) => ({
       key,
-      label: key === 'critical' ? 'Critical Issues' : key === 'warning' ? 'Warnings' : 'Info',
+      label: key === 'critical' ? 'Critical' : key === 'warning' ? 'Warning' : 'Info',
       issues: items.sort((a, b) => {
         const aLine = a.references[0]?.line ?? 0
         const bLine = b.references[0]?.line ?? 0

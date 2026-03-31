@@ -8,12 +8,13 @@ const verdictLabel = computed(() => {
   if (!data.results.value) return 'Waiting for review to start...'
   if (data.results.value.status !== 'complete') {
     const c = data.results.value.completion
-    return `Review in progress (${c.completed}/${c.total} tasks)`
+    return `Review in progress \u2014 ${c.completed} of ${c.total} tasks done`
   }
+  const s = data.results.value.summary
   switch (data.verdict.value) {
     case 'pass': return 'Ready to merge'
-    case 'warn': return 'Needs attention'
-    case 'fail': return 'Action required'
+    case 'warn': return `${s.warning} ${s.warning === 1 ? 'warning' : 'warnings'} \u2014 review before merging`
+    case 'fail': return `${s.critical} critical ${s.critical === 1 ? 'issue' : 'issues'} \u2014 do not merge`
     default: return ''
   }
 })

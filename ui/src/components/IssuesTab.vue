@@ -38,7 +38,8 @@ const showGrouped = computed(() => grouped.value.length > 0)
           type="button"
           @click="data.toggleSeverity(sev)"
         >
-          {{ sev.charAt(0).toUpperCase() }}
+          <span class="filter-label-short">{{ sev.charAt(0).toUpperCase() }}</span>
+          <span class="filter-label-full">{{ sev }}</span>
           <span class="filter-count">{{ data.results.value?.summary[sev] ?? 0 }}</span>
         </button>
       </div>
@@ -94,6 +95,9 @@ const showGrouped = computed(() => grouped.value.length > 0)
 .filter-btn.active.critical { background: rgba(239, 83, 80, 0.15); border-color: rgba(239, 83, 80, 0.4); color: var(--color-critical); }
 .filter-btn.active.warning { background: rgba(255, 167, 38, 0.12); border-color: rgba(255, 167, 38, 0.4); color: var(--color-warning); }
 .filter-btn.active.info { background: rgba(79, 195, 247, 0.1); border-color: rgba(79, 195, 247, 0.3); color: var(--color-info); }
+.filter-label-short { display: none; }
+.filter-label-full { text-transform: capitalize; }
+@media (max-width: 600px) { .filter-label-short { display: inline; } .filter-label-full { display: none; } }
 .filter-count { font-family: var(--font-mono); font-size: 0.6875rem; }
 
 .group-toggle { display: flex; align-items: center; gap: 0.5rem; }

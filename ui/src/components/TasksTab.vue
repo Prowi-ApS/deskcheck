@@ -16,23 +16,23 @@ const emit = defineEmits<{
     <div v-if="data.results.value" class="summary-bar">
       <div class="summary-item">
         <span class="summary-value">{{ data.results.value.completion.completed }}/{{ data.results.value.completion.total }}</span>
-        <span class="summary-label">Tasks</span>
+        <span class="summary-label">Tasks completed</span>
       </div>
       <div v-if="data.results.value.completion.errored > 0" class="summary-item error">
         <span class="summary-value">{{ data.results.value.completion.errored }}</span>
-        <span class="summary-label">Errored</span>
+        <span class="summary-label">Failed</span>
       </div>
       <div v-if="data.usage.value" class="summary-item">
         <span class="summary-value">{{ formatCost(data.usage.value.cost_usd) }}</span>
-        <span class="summary-label">Cost</span>
+        <span class="summary-label">Total cost</span>
       </div>
       <div v-if="data.runDuration.value" class="summary-item">
         <span class="summary-value">{{ data.runDuration.value }}</span>
-        <span class="summary-label">Duration</span>
+        <span class="summary-label">Wall time</span>
       </div>
       <div v-if="data.usage.value" class="summary-item">
         <span class="summary-value">{{ (data.usage.value.input_tokens + data.usage.value.output_tokens).toLocaleString() }}</span>
-        <span class="summary-label">Tokens</span>
+        <span class="summary-label">Tokens used</span>
       </div>
     </div>
 
