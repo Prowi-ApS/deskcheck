@@ -35,7 +35,6 @@ const fileCount = computed(() => {
       <span v-if="showSeverity" class="severity-badge" :class="issue.severity">{{ issue.severity }}</span>
       <span v-if="showCriterion" class="criterion-badge">{{ issue.review_id.split('/').pop() }}</span>
       <span v-if="isMultiFile" class="multi-file-badge">{{ fileCount }} files</span>
-      <span v-if="issue.references[0]?.symbol" class="issue-symbol">{{ issue.references[0].symbol }}</span>
     </div>
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div class="issue-description" v-html="descriptionHtml" />
@@ -69,7 +68,6 @@ const fileCount = computed(() => {
 
 .criterion-badge { font-size: 0.6875rem; color: var(--text-muted); background: var(--bg-expand); padding: 0.15rem 0.5rem; border-radius: 3px; }
 .multi-file-badge { font-size: 0.6875rem; font-weight: 600; color: var(--accent); background: rgba(79, 195, 247, 0.1); padding: 0.15rem 0.5rem; border-radius: 3px; }
-.issue-symbol { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-left: auto; }
 
 .section-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.35rem; }
 .suggestion-label { color: var(--accent); }
