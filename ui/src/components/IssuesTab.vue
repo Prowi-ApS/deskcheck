@@ -53,8 +53,16 @@ const showGrouped = computed(() => grouped.value.length > 0)
 
     <!-- Empty state -->
     <div v-if="filteredIssues.length === 0" class="empty-state">
-      <template v-if="data.allIssues.value.length === 0">No issues found — looking good.</template>
-      <template v-else>No issues match the current filter.</template>
+      <template v-if="data.allIssues.value.length === 0">
+        <div class="empty-clean">
+          <span class="empty-check">&#10003;</span>
+          <div class="empty-clean-title">No issues found</div>
+          <div class="empty-clean-text">All criteria passed — this code looks good to merge.</div>
+        </div>
+      </template>
+      <template v-else>
+        No issues match the current filter. Click a severity button to broaden the filter.
+      </template>
     </div>
 
     <!-- Grouped issue list -->
@@ -96,7 +104,11 @@ const showGrouped = computed(() => grouped.value.length > 0)
 .toggle-btn:hover { background: var(--bg-card-hover); color: var(--text-secondary); }
 .toggle-btn.active { background: var(--bg-card); color: var(--accent); font-weight: 600; }
 
-.empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.9rem; }
+.empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.85rem; }
+.empty-clean { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+.empty-check { font-size: 2rem; color: var(--color-complete); line-height: 1; }
+.empty-clean-title { font-size: 1rem; font-weight: 600; color: var(--text-primary); }
+.empty-clean-text { font-size: 0.85rem; color: var(--text-secondary); }
 
 .issue-group { margin-bottom: 1.75rem; }
 .group-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
