@@ -75,6 +75,7 @@ export interface Reference {
 
 /** A single issue produced by an executor agent. */
 export interface Issue {
+  issue_id?: string
   severity: FindingSeverity
   description: string
   suggestion: string | null
@@ -83,6 +84,7 @@ export interface Issue {
 
 /** An issue enriched with source module and task. */
 export interface FileIssue extends Issue {
+  issue_id: string
   review_id: string
   task_id: string
 }

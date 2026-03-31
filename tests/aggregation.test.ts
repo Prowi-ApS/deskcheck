@@ -102,6 +102,7 @@ describe("aggregation with Issue model", () => {
     const fileIssue = results.by_file["src/service.ts"]![0]!;
     expect(fileIssue.description).toBe("Missing return type");
     expect(fileIssue.review_id).toBe("arch/dto");
+    expect(fileIssue.issue_id).toBe(`${taskIds[0]}:0`);
     expect(fileIssue.references[0]!.symbol).toBe("Service::getData");
     expect(fileIssue.references[0]!.code).toBe("getData() {");
     expect(fileIssue.references[0]!.suggestedCode).toBe("getData(): Data {");
@@ -131,9 +132,9 @@ describe("aggregation with Issue model", () => {
     expect(results.by_file["src/service.ts"]).toHaveLength(1);
     expect(results.by_file["src/handler.ts"]).toHaveLength(1);
 
-    // Same issue object in both
-    expect(results.by_file["src/service.ts"]![0]!.description).toBe("Duplicated HTTP client setup");
-    expect(results.by_file["src/handler.ts"]![0]!.description).toBe("Duplicated HTTP client setup");
+    // Same issue_id under both files
+    expect(results.by_file["src/service.ts"]![0]!.issue_id).toBe(`${taskIds[0]}:0`);
+    expect(results.by_file["src/handler.ts"]![0]!.issue_id).toBe(`${taskIds[0]}:0`);
   });
 
   it("does not double-count a cross-file issue in summary", () => {
@@ -234,5 +235,44 @@ describe("aggregation with Issue model", () => {
     storage.completeTask(planId, taskIds[1]!, []);
     results = storage.getResults(planId);
     expect(results.status).toBe("complete");
+  });
+
+  it("stamps issue_id as task_id:index", () => {
+    const planId = createTestPlan();
+    const plan = storage.getPlan(planId);
+    const taskIds = Object.keys(plan.tasks);
+
+    storage.completeTask(planId, taskIds[0]!, [
+      { severity: "warning", description: "Issue A", suggestion: null, references: [{ file: "src/service.ts", symbol: null, line: null, code: null, suggestedCode: null, note: null }] },
+      { severity: "critical", description: "Issue B", suggestion: null, references: [{ file: "src/service.ts", symbol: null, line: null, code: null, suggestedCode: null, note: null }] },
+      { severity: "info", description: "Issue C", suggestion: null, references: [{ file: "src/service.ts", symbol: null, line: null, code: null, suggestedCode: null, note: null }] },
+    ]);
+
+    const results = storage.getResults(planId);
+    const taskResult = results.task_results[taskIds[0]!]!;
+    expect(taskResult.issues[0]!.issue_id).toBe(`${taskIds[0]}:0`);
+    expect(taskResult.issues[1]!.issue_id).toBe(`${taskIds[0]}:1`);
+    expect(taskResult.issues[2]!.issue_id).toBe(`${taskIds[0]}:2`);
+  });
+
+  it("issue_id is stable across recomputation", () => {
+    const planId = createTestPlan();
+    const plan = storage.getPlan(planId);
+    const taskIds = Object.keys(plan.tasks);
+
+    storage.completeTask(planId, taskIds[0]!, [
+      { severity: "warning", description: "Issue A", suggestion: null, references: [{ file: "src/service.ts", symbol: null, line: null, code: null, suggestedCode: null, note: null }] },
+    ]);
+
+    const results1 = storage.getResults(planId);
+    const id1 = results1.task_results[taskIds[0]!]!.issues[0]!.issue_id;
+
+    // Complete second task — triggers full recomputation
+    storage.completeTask(planId, taskIds[1]!, []);
+
+    const results2 = storage.getResults(planId);
+    const id2 = results2.task_results[taskIds[0]!]!.issues[0]!.issue_id;
+
+    expect(id1).toBe(id2);
   });
 });

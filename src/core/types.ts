@@ -238,6 +238,8 @@ export interface Reference {
 
 /** A single issue produced by an executor agent. */
 export interface Issue {
+  /** Stable identity, stamped by recomputeAggregations as `${task_id}:${index}`. */
+  issue_id?: string;
   /** How severe this issue is. */
   severity: FindingSeverity;
   /** Description of what's wrong. */
@@ -250,6 +252,8 @@ export interface Issue {
 
 /** An issue enriched with its source module and task for by-file grouping. */
 export interface FileIssue extends Issue {
+  /** Stable identity, always present on FileIssue (narrowed from optional). */
+  issue_id: string;
   /** Which criterion produced this issue. */
   review_id: string;
   /** Which task produced this issue. */

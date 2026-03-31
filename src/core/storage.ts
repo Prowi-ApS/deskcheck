@@ -660,6 +660,13 @@ export class ReviewStorage {
       errored: tasks.filter((t) => t.status === "error").length,
     };
 
+    // ---- Stamp issue_id on all issues ----
+    for (const taskResult of Object.values(results.task_results)) {
+      for (let i = 0; i < taskResult.issues.length; i++) {
+        taskResult.issues[i]!.issue_id = `${taskResult.task_id}:${i}`;
+      }
+    }
+
     // ---- Summary (aggregate issue counts) ----
     const summary = { total: 0, critical: 0, warning: 0, info: 0 };
 
@@ -679,6 +686,7 @@ export class ReviewStorage {
       for (const issue of taskResult.issues) {
         const fileIssue: FileIssue = {
           ...issue,
+          issue_id: issue.issue_id!,
           review_id: taskResult.review_id,
           task_id: taskResult.task_id,
         };
