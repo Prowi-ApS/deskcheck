@@ -13,9 +13,9 @@ function copyPath(ref: Reference) {
   <div class="ref-block">
     <div class="ref-header">
       <span class="ref-path" role="button" tabindex="0" @click="copyPath(reference)" @keydown.enter="copyPath(reference)" title="Click to copy">{{ reference.file }}<template v-if="reference.line">:{{ reference.line }}</template></span>
-      <span v-if="reference.symbol" class="ref-symbol">{{ reference.symbol }}</span>
-      <span v-if="reference.note" class="ref-note">{{ reference.note }}</span>
+      <span v-if="reference.symbol" class="ref-symbol">in <strong>{{ reference.symbol }}</strong></span>
     </div>
+    <div v-if="reference.note" class="ref-note">{{ reference.note }}</div>
     <div v-if="reference.code && reference.suggestedCode" class="ref-diff">
       <div class="ref-diff-col current">
         <div class="ref-diff-label">Current code</div>
@@ -41,8 +41,9 @@ function copyPath(ref: Reference) {
 .ref-header { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .ref-path { font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; color: var(--accent); cursor: pointer; }
 .ref-path:hover { text-decoration: underline; }
-.ref-symbol { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
-.ref-note { font-size: 0.75rem; font-style: italic; color: var(--text-muted); }
+.ref-symbol { font-size: 0.75rem; color: var(--text-muted); }
+.ref-symbol strong { font-family: var(--font-mono); font-weight: 600; color: var(--text-secondary); }
+.ref-note { font-size: 0.75rem; font-style: italic; color: var(--text-muted); margin-top: 0.2rem; }
 
 .ref-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.5rem; }
 @media (max-width: 768px) { .ref-diff { grid-template-columns: 1fr; } }
