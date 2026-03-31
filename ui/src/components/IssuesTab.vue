@@ -43,12 +43,9 @@ const showGrouped = computed(() => grouped.value.length > 0)
           <span class="filter-count">{{ data.results.value?.summary[sev] ?? 0 }}</span>
         </button>
       </div>
-      <div class="group-toggle">
-        <span class="group-label">Group by</span>
-        <div class="toggle-buttons" role="group" aria-label="Group issues by">
-          <button type="button" class="toggle-btn" :class="{ active: groupMode === 'severity' }" :aria-pressed="groupMode === 'severity'" @click="groupMode = 'severity'">Severity</button>
-          <button type="button" class="toggle-btn" :class="{ active: groupMode === 'criterion' }" :aria-pressed="groupMode === 'criterion'" @click="groupMode = 'criterion'">Criterion</button>
-        </div>
+      <div class="toggle-buttons" role="group" aria-label="Group issues by">
+        <button type="button" class="toggle-btn" :class="{ active: groupMode === 'severity' }" :aria-pressed="groupMode === 'severity'" @click="groupMode = 'severity'">Severity</button>
+        <button type="button" class="toggle-btn" :class="{ active: groupMode === 'criterion' }" :aria-pressed="groupMode === 'criterion'" @click="groupMode = 'criterion'">Criterion</button>
       </div>
     </div>
 
@@ -78,6 +75,7 @@ const showGrouped = computed(() => grouped.value.length > 0)
           :key="issue.issue_id"
           :issue="issue"
           :show-criterion="groupMode === 'severity'"
+          :show-severity="groupMode !== 'severity'"
         />
       </div>
     </div>
@@ -100,8 +98,6 @@ const showGrouped = computed(() => grouped.value.length > 0)
 @media (max-width: 600px) { .filter-label-short { display: inline; } .filter-label-full { display: none; } }
 .filter-count { font-family: var(--font-mono); font-size: 0.6875rem; }
 
-.group-toggle { display: flex; align-items: center; gap: 0.5rem; }
-.group-label { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .toggle-buttons { display: flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
 .toggle-btn { padding: 0.375rem 0.75rem; border: none; background: transparent; color: var(--text-muted); font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
 .toggle-btn + .toggle-btn { border-left: 1px solid var(--border); }

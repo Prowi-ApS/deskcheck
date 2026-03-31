@@ -160,6 +160,7 @@ export function useRunData(
     if (!plan.value?.started_at) return null
     const end = plan.value.completed_at ? new Date(plan.value.completed_at) : new Date()
     const ms = end.getTime() - new Date(plan.value.started_at).getTime()
+    if (ms < 1000) return null // sub-second durations are noise
     return formatDuration(ms)
   })
 

@@ -4,10 +4,13 @@ import { useMarkdown } from '../composables/useMarkdown'
 import ReferenceBlock from './ReferenceBlock.vue'
 import type { FileIssue } from '../types'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   issue: FileIssue
   showCriterion?: boolean
-}>()
+  showSeverity?: boolean
+}>(), {
+  showSeverity: true,
+})
 
 const { render } = useMarkdown()
 
@@ -29,7 +32,7 @@ const fileCount = computed(() => {
 <template>
   <div class="issue-card" :class="`severity-${issue.severity}`">
     <div class="issue-header">
-      <span class="severity-badge" :class="issue.severity">{{ issue.severity }}</span>
+      <span v-if="showSeverity" class="severity-badge" :class="issue.severity">{{ issue.severity }}</span>
       <span v-if="showCriterion" class="criterion-badge">{{ issue.review_id.split('/').pop() }}</span>
       <span v-if="isMultiFile" class="multi-file-badge">{{ fileCount }} files</span>
       <span v-if="issue.references[0]?.symbol" class="issue-symbol">{{ issue.references[0].symbol }}</span>
