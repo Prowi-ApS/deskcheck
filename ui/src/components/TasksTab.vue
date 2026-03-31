@@ -102,7 +102,7 @@ const emit = defineEmits<{
 .summary-bar { display: flex; gap: 1.5rem; margin-bottom: 1.25rem; padding: 0.75rem 1rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; }
 .summary-item { display: flex; flex-direction: column; align-items: center; }
 .summary-value { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 600; }
-.summary-label { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.1rem; }
+.summary-label { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.1rem; }
 .summary-item.error .summary-value { color: var(--color-critical); }
 
 .progress-section { margin-bottom: 1rem; }
@@ -110,7 +110,7 @@ const emit = defineEmits<{
 .progress-fill { height: 100%; background: var(--color-complete); border-radius: 3px; transition: width 0.3s ease; }
 
 .task-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.task-table thead th { padding: 0.4rem 0.75rem; text-align: left; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); background: var(--bg-expand); border-bottom: 1px solid var(--border); }
+.task-table thead th { padding: 0.4rem 0.75rem; text-align: left; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); background: var(--bg-expand); border-bottom: 1px solid var(--border); }
 .task-table tbody td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
 .task-table tbody tr:last-child td { border-bottom: none; }
 .task-table .num { text-align: right; font-family: var(--font-mono); font-size: 0.75rem; }
@@ -127,12 +127,12 @@ const emit = defineEmits<{
 
 .file-cell { display: flex; flex-direction: column; gap: 0.1rem; }
 .task-filename { font-family: var(--font-mono); font-weight: 500; font-size: 0.8rem; }
-.extra-files { font-size: 0.65rem; color: var(--text-muted); font-weight: 400; }
-.task-filepath { font-size: 0.65rem; color: var(--text-muted); }
+.extra-files { font-size: 0.6875rem; color: var(--text-muted); font-weight: 400; }
+.task-filepath { font-size: 0.6875rem; color: var(--text-muted); }
 .criterion-badge { font-size: 0.75rem; font-weight: 500; }
-.model-badge { font-size: 0.6rem; color: var(--text-muted); background: var(--bg-expand); padding: 0.1rem 0.4rem; border-radius: 3px; font-family: var(--font-mono); margin-left: 0.4rem; }
+.model-badge { font-size: 0.6875rem; color: var(--text-muted); background: var(--bg-expand); padding: 0.1rem 0.4rem; border-radius: 3px; font-family: var(--font-mono); margin-left: 0.4rem; }
 
-.task-status-badge { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; padding: 0.15rem 0.4rem; border-radius: 3px; }
+.task-status-badge { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; padding: 0.15rem 0.4rem; border-radius: 3px; }
 .task-status-badge.complete { background: rgba(102, 187, 106, 0.15); color: var(--color-complete); }
 .task-status-badge.in_progress { background: rgba(171, 71, 188, 0.2); color: var(--color-running); animation: pulse 2s ease-in-out infinite; }
 .task-status-badge.pending { background: rgba(90, 100, 120, 0.2); color: var(--text-muted); }
@@ -140,7 +140,7 @@ const emit = defineEmits<{
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
 .issues-cell { display: flex; gap: 0.25rem; justify-content: flex-end; align-items: center; }
-.sev-count { font-family: var(--font-mono); font-size: 0.65rem; font-weight: 700; padding: 0.1rem 0.35rem; border-radius: 3px; }
+.sev-count { font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; padding: 0.1rem 0.35rem; border-radius: 3px; }
 .sev-count.critical { background: rgba(239, 83, 80, 0.2); color: var(--color-critical); }
 .sev-count.warning { background: rgba(255, 167, 38, 0.15); color: var(--color-warning); }
 .sev-count.info { background: rgba(79, 195, 247, 0.1); color: var(--color-info); }

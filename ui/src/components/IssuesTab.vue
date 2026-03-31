@@ -28,12 +28,13 @@ const showGrouped = computed(() => grouped.value.length > 0)
   <div class="issues-tab">
     <!-- Controls -->
     <div class="issues-controls">
-      <div class="severity-filter">
+      <div class="severity-filter" role="group" aria-label="Filter by severity">
         <button
           v-for="sev in SEVERITY_ORDER"
           :key="sev"
           class="filter-btn"
           :class="[sev, { active: data.activeSeverities.value.has(sev) }]"
+          :aria-pressed="data.activeSeverities.value.has(sev)"
           type="button"
           @click="data.toggleSeverity(sev)"
         >
@@ -43,9 +44,9 @@ const showGrouped = computed(() => grouped.value.length > 0)
       </div>
       <div class="group-toggle">
         <span class="group-label">Group by</span>
-        <div class="toggle-buttons">
-          <button type="button" class="toggle-btn" :class="{ active: groupMode === 'severity' }" @click="groupMode = 'severity'">Severity</button>
-          <button type="button" class="toggle-btn" :class="{ active: groupMode === 'criterion' }" @click="groupMode = 'criterion'">Criterion</button>
+        <div class="toggle-buttons" role="group" aria-label="Group issues by">
+          <button type="button" class="toggle-btn" :class="{ active: groupMode === 'severity' }" :aria-pressed="groupMode === 'severity'" @click="groupMode = 'severity'">Severity</button>
+          <button type="button" class="toggle-btn" :class="{ active: groupMode === 'criterion' }" :aria-pressed="groupMode === 'criterion'" @click="groupMode = 'criterion'">Criterion</button>
         </div>
       </div>
     </div>
@@ -80,28 +81,28 @@ const showGrouped = computed(() => grouped.value.length > 0)
 .issues-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
 
 .severity-filter { display: flex; gap: 0.35rem; }
-.filter-btn { padding: 0.3rem 0.6rem; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text-muted); font-size: 0.7rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; display: flex; align-items: center; gap: 0.3rem; }
+.filter-btn { padding: 0.375rem 0.75rem; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; display: flex; align-items: center; gap: 0.3rem; }
 .filter-btn:hover { background: var(--bg-card-hover); }
 .filter-btn.active.critical { background: rgba(239, 83, 80, 0.15); border-color: rgba(239, 83, 80, 0.4); color: var(--color-critical); }
 .filter-btn.active.warning { background: rgba(255, 167, 38, 0.12); border-color: rgba(255, 167, 38, 0.4); color: var(--color-warning); }
 .filter-btn.active.info { background: rgba(79, 195, 247, 0.1); border-color: rgba(79, 195, 247, 0.3); color: var(--color-info); }
-.filter-count { font-family: var(--font-mono); font-size: 0.6rem; }
+.filter-count { font-family: var(--font-mono); font-size: 0.6875rem; }
 
 .group-toggle { display: flex; align-items: center; gap: 0.5rem; }
-.group-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.group-label { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .toggle-buttons { display: flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-.toggle-btn { padding: 0.3rem 0.65rem; border: none; background: transparent; color: var(--text-muted); font-size: 0.7rem; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
+.toggle-btn { padding: 0.375rem 0.75rem; border: none; background: transparent; color: var(--text-muted); font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
 .toggle-btn + .toggle-btn { border-left: 1px solid var(--border); }
 .toggle-btn:hover { background: var(--bg-card-hover); color: var(--text-secondary); }
 .toggle-btn.active { background: var(--bg-card); color: var(--accent); font-weight: 600; }
 
 .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.9rem; }
 
-.issue-group { margin-bottom: 1.5rem; }
-.group-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0.4rem 0; }
+.issue-group { margin-bottom: 1.75rem; }
+.group-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
 .group-name { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-secondary); }
 .group-header-critical .group-name { color: var(--color-critical); }
 .group-header-warning .group-name { color: var(--color-warning); }
 .group-header-info .group-name { color: var(--color-info); }
-.group-count { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); background: var(--bg-card); padding: 0.1rem 0.4rem; border-radius: 3px; }
+.group-count { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-muted); background: var(--bg-card); padding: 0.15rem 0.4rem; border-radius: 3px; }
 </style>

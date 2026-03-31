@@ -108,16 +108,16 @@ function fileName(): string {
 .detail-controls { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end; flex-shrink: 0; }
 
 .severity-filter { display: flex; gap: 0.3rem; }
-.filter-btn { padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text-muted); font-size: 0.65rem; font-weight: 600; text-transform: uppercase; cursor: pointer; }
+.filter-btn { padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text-muted); font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; cursor: pointer; }
 .filter-btn:hover { background: var(--bg-card-hover); }
 .filter-btn.active.critical { background: rgba(239, 83, 80, 0.15); border-color: rgba(239, 83, 80, 0.4); color: var(--color-critical); }
 .filter-btn.active.warning { background: rgba(255, 167, 38, 0.12); border-color: rgba(255, 167, 38, 0.4); color: var(--color-warning); }
 .filter-btn.active.info { background: rgba(79, 195, 247, 0.1); border-color: rgba(79, 195, 247, 0.3); color: var(--color-info); }
 
 .group-toggle { display: flex; align-items: center; gap: 0.5rem; }
-.group-label { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; }
+.group-label { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; }
 .toggle-buttons { display: flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-.toggle-btn { padding: 0.25rem 0.5rem; border: none; background: transparent; color: var(--text-muted); font-size: 0.65rem; cursor: pointer; }
+.toggle-btn { padding: 0.25rem 0.5rem; border: none; background: transparent; color: var(--text-muted); font-size: 0.6875rem; cursor: pointer; }
 .toggle-btn + .toggle-btn { border-left: 1px solid var(--border); }
 .toggle-btn.active { background: var(--bg-card); color: var(--accent); font-weight: 600; }
 
@@ -132,5 +132,5 @@ function fileName(): string {
 .group-header-critical .group-name { color: var(--color-critical); }
 .group-header-warning .group-name { color: var(--color-warning); }
 .group-header-info .group-name { color: var(--color-info); }
-.group-count { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); background: var(--bg-card); padding: 0.1rem 0.35rem; border-radius: 3px; }
+.group-count { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-muted); background: var(--bg-card); padding: 0.1rem 0.35rem; border-radius: 3px; }
 </style>

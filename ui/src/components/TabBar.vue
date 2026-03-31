@@ -17,11 +17,13 @@ const emit = defineEmits<{
 
 <template>
   <div class="tab-bar">
-    <div class="tab-bar-inner">
+    <div class="tab-bar-inner" role="tablist">
       <button
         v-for="tab in tabs"
         :key="tab.key"
         type="button"
+        role="tab"
+        :aria-selected="activeTab === tab.key"
         class="tab-btn"
         :class="{ active: activeTab === tab.key }"
         @click="emit('update:activeTab', tab.key)"
@@ -36,10 +38,10 @@ const emit = defineEmits<{
 <style scoped>
 .tab-bar { border-bottom: 1px solid var(--border); padding: 0 2rem; }
 .tab-bar-inner { max-width: 1100px; margin: 0 auto; display: flex; gap: 0; }
-.tab-btn { position: relative; padding: 0.6rem 1rem; border: none; background: none; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; transition: color 0.15s; }
+.tab-btn { position: relative; padding: 0.75rem 1.25rem; border: none; background: none; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; transition: color 0.15s; }
 .tab-btn:hover { color: var(--text-secondary); }
 .tab-btn.active { color: var(--accent); }
 .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--accent); }
-.tab-count { font-family: var(--font-mono); font-size: 0.65rem; background: var(--bg-card); padding: 0.1rem 0.35rem; border-radius: 3px; margin-left: 0.3rem; }
+.tab-count { font-family: var(--font-mono); font-size: 0.6875rem; background: var(--bg-card); padding: 0.15rem 0.4rem; border-radius: 3px; margin-left: 0.3rem; }
 .tab-btn.active .tab-count { background: rgba(79, 195, 247, 0.15); color: var(--accent); }
 </style>
