@@ -40,14 +40,18 @@ const fileCount = computed(() => {
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div class="issue-description" v-html="descriptionHtml" />
     <div v-if="suggestionHtml" class="issue-suggestion">
+      <div class="section-label suggestion-label">Suggestion</div>
       <!-- eslint-disable-next-line vue/no-v-html -->
       <span v-html="suggestionHtml" />
     </div>
-    <ReferenceBlock
-      v-for="(ref, idx) in issue.references"
-      :key="idx"
-      :reference="ref"
-    />
+    <div v-if="issue.references.length > 0" class="issue-references">
+      <div class="section-label">{{ issue.references.length === 1 ? 'Location' : 'Locations' }}</div>
+      <ReferenceBlock
+        v-for="(ref, idx) in issue.references"
+        :key="idx"
+        :reference="ref"
+      />
+    </div>
   </div>
 </template>
 
@@ -67,13 +71,18 @@ const fileCount = computed(() => {
 .multi-file-badge { font-size: 0.6875rem; font-weight: 600; color: var(--accent); background: rgba(79, 195, 247, 0.1); padding: 0.15rem 0.5rem; border-radius: 3px; }
 .issue-symbol { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-left: auto; }
 
+.section-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.35rem; }
+.suggestion-label { color: var(--accent); }
+
 .issue-description { font-size: 0.85rem; line-height: 1.6; color: var(--text-primary); }
 .issue-description :deep(p) { margin: 0 0 0.4rem; }
 .issue-description :deep(p:last-child) { margin-bottom: 0; }
 .issue-description :deep(code) { font-family: var(--font-mono); font-size: 0.75rem; background: var(--bg-expand); padding: 0.1rem 0.3rem; border-radius: 3px; overflow-wrap: break-word; }
 
-.issue-suggestion { margin-top: 0.6rem; padding: 0.6rem 0.85rem; background: var(--bg-expand); border-left: 2px solid var(--accent); border-radius: 0 4px 4px 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
+.issue-suggestion { margin-top: 0.75rem; padding: 0.6rem 0.85rem; background: var(--bg-expand); border-left: 2px solid var(--accent); border-radius: 0 4px 4px 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
 .issue-suggestion :deep(p) { margin: 0 0 0.4rem; }
 .issue-suggestion :deep(p:last-child) { margin-bottom: 0; }
 .issue-suggestion :deep(code) { font-family: var(--font-mono); font-size: 0.75rem; background: var(--bg-card); padding: 0.1rem 0.3rem; border-radius: 3px; }
+
+.issue-references { margin-top: 0.75rem; }
 </style>
