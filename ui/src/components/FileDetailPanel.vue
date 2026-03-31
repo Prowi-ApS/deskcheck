@@ -19,9 +19,12 @@ const fileIssues = computed(() =>
 const counts = computed(() => data.severityCounts(fileIssues.value))
 const totalCounts = computed(() => ({ total: data.issuesForFile(props.filePath).length }))
 
-const criteria = computed(() =>
-  [...new Set(data.issuesForFile(props.filePath).map(i => i.review_id))]
+// Get criteria from fileRows (plan data) — correct even for files with zero issues
+const fileRowData = computed(() =>
+  data.fileRows.value.find(r => r.path === props.filePath)
 )
+const criteria = computed(() => fileRowData.value?.criteriaIds ?? [])
+const criteriaCount = computed(() => fileRowData.value?.criteriaCount ?? 0)
 
 const grouped = computed(() => data.groupIssues(fileIssues.value, groupMode.value))
 
@@ -42,7 +45,7 @@ function fileName(): string {
         <div class="detail-summary">
           {{ counts.total }} issues
           <template v-if="counts.total !== totalCounts.total">({{ totalCounts.total }} total)</template>
-          from {{ criteria.length }} criteria
+          from {{ criteriaCount }} criteria
         </div>
       </div>
       <div class="detail-controls">
@@ -67,7 +70,10 @@ function fileName(): string {
     </div>
 
     <div v-if="fileIssues.length === 0 && totalCounts.total === 0" class="clean-state">
-      Reviewed by {{ criteria.length }} criteria — no issues found.
+      <p>Reviewed by {{ criteriaCount }} criteria — no issues found.</p>
+      <ul v-if="criteria.length > 0" class="criteria-list">
+        <li v-for="c in criteria" :key="c">{{ c.split('/').pop() }}</li>
+      </ul>
     </div>
 
     <div v-else-if="grouped.length === 0" class="empty-state">
@@ -116,6 +122,9 @@ function fileName(): string {
 .toggle-btn.active { background: var(--bg-card); color: var(--accent); font-weight: 600; }
 
 .clean-state, .empty-state { text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.85rem; }
+.clean-state p { margin: 0 0 0.5rem; }
+.criteria-list { list-style: none; padding: 0; margin: 0; font-size: 0.75rem; color: var(--text-secondary); }
+.criteria-list li::before { content: '— '; color: var(--text-muted); }
 
 .issue-group { margin-bottom: 1.25rem; }
 .group-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; padding: 0.3rem 0; }

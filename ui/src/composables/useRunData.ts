@@ -104,11 +104,26 @@ export function useRunData(
   // -- Shared filter state --
   const activeSeverities = ref<Set<FindingSeverity>>(new Set(['critical', 'warning', 'info']))
 
+  const ALL_SEVERITIES: Set<FindingSeverity> = new Set(['critical', 'warning', 'info'])
+
   function toggleSeverity(sev: FindingSeverity) {
-    const next = new Set(activeSeverities.value)
-    if (next.has(sev)) { if (next.size > 1) next.delete(sev) }
-    else next.add(sev)
-    activeSeverities.value = next
+    const current = activeSeverities.value
+    if (current.size === 1 && current.has(sev)) {
+      // Only this one active — click again restores all
+      activeSeverities.value = new Set(ALL_SEVERITIES)
+    } else if (current.size === ALL_SEVERITIES.size) {
+      // All active — click isolates to just this one
+      activeSeverities.value = new Set([sev])
+    } else {
+      // Subset active — toggle this one
+      const next = new Set(current)
+      if (next.has(sev)) {
+        if (next.size > 1) next.delete(sev)
+      } else {
+        next.add(sev)
+      }
+      activeSeverities.value = next
+    }
   }
 
   // -- Task sort state --

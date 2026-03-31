@@ -63,7 +63,7 @@ const emit = defineEmits<{
           @click="row.status === 'complete' && row.totalFindings > 0 ? emit('navigate-to-file', row.files[0]!) : undefined"
         >
           <td class="file-cell">
-            <span class="task-filename">{{ row.files[0]?.split('/').pop() }}</span>
+            <span class="task-filename">{{ row.files[0]?.split('/').pop() }}<template v-if="row.files.length > 1"> <span class="extra-files">+{{ row.files.length - 1 }} more</span></template></span>
             <span class="task-filepath">{{ row.files[0]?.split('/').slice(0, -1).join('/') }}</span>
           </td>
           <td>
@@ -127,6 +127,7 @@ const emit = defineEmits<{
 
 .file-cell { display: flex; flex-direction: column; gap: 0.1rem; }
 .task-filename { font-family: var(--font-mono); font-weight: 500; font-size: 0.8rem; }
+.extra-files { font-size: 0.65rem; color: var(--text-muted); font-weight: 400; }
 .task-filepath { font-size: 0.65rem; color: var(--text-muted); }
 .criterion-badge { font-size: 0.75rem; font-weight: 500; }
 .model-badge { font-size: 0.6rem; color: var(--text-muted); background: var(--bg-expand); padding: 0.1rem 0.4rem; border-radius: 3px; font-family: var(--font-mono); margin-left: 0.4rem; }

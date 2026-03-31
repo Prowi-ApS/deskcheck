@@ -1,12 +1,23 @@
 <script setup lang="ts">
-import { ref, inject } from 'vue'
+import { ref, watch, inject } from 'vue'
 import { RUN_DATA_KEY } from '../composables/useRunData'
 import { sortIndicator } from '../utils/format'
 import FileDetailPanel from './FileDetailPanel.vue'
 
+const props = defineProps<{ initialFile?: string | null }>()
+const emit = defineEmits<{ 'file-opened': [] }>()
+
 const data = inject(RUN_DATA_KEY)!
 
 const selectedFile = ref<string | null>(null)
+
+// Open file passed from another tab (e.g. task row click)
+watch(() => props.initialFile, (file) => {
+  if (file) {
+    selectedFile.value = file
+    emit('file-opened')
+  }
+}, { immediate: true })
 
 function selectFile(path: string) {
   selectedFile.value = path

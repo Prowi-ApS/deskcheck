@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, provide, onMounted, onUnmounted } from 'vue'
+import { ref, computed, provide, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApi } from '../composables/useApi'
 import { useSse } from '../composables/useSse'
@@ -69,15 +69,14 @@ const defaultTab = computed<ActiveTab>(() => {
   return 'tasks'
 })
 
-// Set default tab once loading finishes
-const hasSetDefault = ref(false)
-const effectiveTab = computed(() => {
-  if (!hasSetDefault.value && !loading.value) {
-    hasSetDefault.value = true
+// Set default tab once loading finishes (watch, not computed — no side effects in computed)
+watch(loading, (isLoading) => {
+  if (!isLoading) {
     activeTab.value = defaultTab.value
   }
-  return activeTab.value
-})
+}, { once: true })
+
+const pendingFile = ref<string | null>(null)
 
 const tabs = computed<Tab[]>(() => [
   { key: 'issues', label: 'Issues', count: results.value?.summary.total ?? undefined },
@@ -87,6 +86,10 @@ const tabs = computed<Tab[]>(() => [
 
 function goBack() { router.push('/') }
 function onTabChange(key: string) { activeTab.value = key as ActiveTab }
+function onNavigateToFile(filePath: string) {
+  pendingFile.value = filePath
+  activeTab.value = 'files'
+}
 </script>
 
 <template>
@@ -109,11 +112,11 @@ function onTabChange(key: string) { activeTab.value = key as ActiveTab }
     </header>
 
     <VerdictBanner />
-    <TabBar :tabs="tabs" :active-tab="effectiveTab" @update:active-tab="onTabChange" />
+    <TabBar :tabs="tabs" :active-tab="activeTab" @update:active-tab="onTabChange" />
 
-    <IssuesTab v-if="effectiveTab === 'issues'" />
-    <TasksTab v-if="effectiveTab === 'tasks'" />
-    <FilesTab v-if="effectiveTab === 'files'" />
+    <IssuesTab v-if="activeTab === 'issues'" />
+    <TasksTab v-if="activeTab === 'tasks'" @navigate-to-file="onNavigateToFile" />
+    <FilesTab v-if="activeTab === 'files'" :initial-file="pendingFile" @file-opened="pendingFile = null" />
   </div>
 </template>
 
