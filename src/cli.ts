@@ -93,8 +93,8 @@ async function executeAndPrint(
       case "task_completed": {
         const moduleName = event.reviewId.split("/").pop() ?? event.reviewId;
         const fileName = event.files.map((f) => f.split("/").pop()).join(", ");
-        if (event.findingCount > 0) {
-          console.log(`${YELLOW}  ▲ ${moduleName}${RESET} ${DIM}→${RESET} ${fileName} ${DIM}(${event.findingCount} findings)${RESET}`);
+        if (event.issueCount > 0) {
+          console.log(`${YELLOW}  ▲ ${moduleName}${RESET} ${DIM}→${RESET} ${fileName} ${DIM}(${event.issueCount} issues)${RESET}`);
         } else {
           console.log(`${GREEN}  ✓ ${moduleName}${RESET} ${DIM}→${RESET} ${fileName} ${DIM}(clean)${RESET}`);
         }

@@ -1,55 +1,66 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useMarkdown } from '../composables/useMarkdown'
-import type { Finding } from '../types'
+import type { Issue } from '../types'
 
 const props = defineProps<{
-  finding: Finding
+  issue: Issue
 }>()
 
 const { render } = useMarkdown()
 
-const descriptionHtml = computed(() => render(props.finding.description))
+const descriptionHtml = computed(() => render(props.issue.description))
 const suggestionHtml = computed(() =>
-  props.finding.suggestion ? render(props.finding.suggestion) : null,
+  props.issue.suggestion ? render(props.issue.suggestion) : null,
 )
-
-const location = computed(() => {
-  if (!props.finding.file) return null
-  return props.finding.file + (props.finding.line ? `:${props.finding.line}` : '')
-})
 </script>
 
 <template>
-  <div class="finding-card" :class="`severity-${finding.severity}`">
-    <span class="severity" :class="finding.severity">{{ finding.severity }}</span>
+  <div class="issue-card" :class="`severity-${issue.severity}`">
+    <span class="severity" :class="issue.severity">{{ issue.severity }}</span>
     <span class="description" v-html="descriptionHtml" />
-    <div v-if="location" class="location">{{ location }}</div>
+
+    <!-- References -->
+    <div v-for="(ref, idx) in issue.references" :key="idx" class="reference">
+      <div class="ref-location">
+        <span v-if="ref.symbol" class="ref-symbol">{{ ref.symbol }}</span>
+        <span class="ref-file">{{ ref.file }}<template v-if="ref.line">:{{ ref.line }}</template></span>
+        <span v-if="ref.note" class="ref-note">{{ ref.note }}</span>
+      </div>
+      <div v-if="ref.code" class="ref-code">
+        <pre><code>{{ ref.code }}</code></pre>
+      </div>
+      <div v-if="ref.suggestedCode" class="ref-suggested">
+        <div class="ref-suggested-label">Suggested:</div>
+        <pre><code>{{ ref.suggestedCode }}</code></pre>
+      </div>
+    </div>
+
     <div v-if="suggestionHtml" class="suggestion" v-html="suggestionHtml" />
   </div>
 </template>
 
 <style scoped>
-.finding-card {
+.issue-card {
   padding: var(--space-md) var(--space-lg);
   border-bottom: 1px solid var(--border);
   font-size: 0.8rem;
   border-left: 3px solid transparent;
 }
 
-.finding-card:last-child {
+.issue-card:last-child {
   border-bottom: none;
 }
 
-.finding-card.severity-critical {
+.issue-card.severity-critical {
   border-left-color: var(--color-critical);
 }
 
-.finding-card.severity-warning {
+.issue-card.severity-warning {
   border-left-color: var(--color-warning);
 }
 
-.finding-card.severity-info {
+.issue-card.severity-info {
   border-left-color: var(--color-info);
 }
 
@@ -98,11 +109,50 @@ const location = computed(() => {
   border-radius: 3px;
 }
 
-.location {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--text-muted);
+.reference {
   margin-top: var(--space-sm);
+  padding-left: 0.5rem;
+  border-left: 2px solid var(--border);
+}
+
+.ref-location {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.ref-symbol {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ref-note {
+  font-style: italic;
+  font-family: inherit;
+  font-size: 0.65rem;
+}
+
+.ref-code, .ref-suggested {
+  margin-top: 0.25rem;
+}
+
+.ref-code pre, .ref-suggested pre {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  overflow-x: auto;
+}
+
+.ref-suggested-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 0.15rem;
 }
 
 .suggestion {

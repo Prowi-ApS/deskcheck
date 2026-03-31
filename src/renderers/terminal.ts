@@ -1,5 +1,5 @@
-import type { ReviewPlan, ReviewResults, FindingSeverity } from "../core/types.js";
-import { groupFindingsBySeveritySection } from "./shared.js";
+import type { ReviewPlan, ReviewResults, FindingSeverity, Reference } from "../core/types.js";
+import { groupIssuesBySeveritySection } from "./shared.js";
 
 // ANSI color codes
 const RESET = "\x1b[0m";
@@ -58,25 +58,42 @@ export function renderTerminal(
 
   lines.push("");
 
-  // Findings grouped by severity
-  const sections = groupFindingsBySeveritySection(results);
+  // Issues grouped by severity
+  const sections = groupIssuesBySeveritySection(results);
 
   for (const section of sections) {
     const color = SEVERITY_COLORS[section.severity];
     const icon = SEVERITY_ICONS[section.severity];
-    lines.push(`${BOLD}${color}  ${icon} ${section.label} (${section.findings.length})${RESET}`);
+    lines.push(`${BOLD}${color}  ${icon} ${section.label} (${section.issues.length})${RESET}`);
     lines.push("");
 
-    for (let i = 0; i < section.findings.length; i++) {
-      const { finding, reviewId } = section.findings[i]!;
-      const location = finding.line
-        ? `${finding.file}:${finding.line}`
-        : finding.file;
+    for (let i = 0; i < section.issues.length; i++) {
+      const { issue, reviewId } = section.issues[i]!;
 
-      lines.push(`    ${color}${i + 1}.${RESET} ${finding.description}`);
-      lines.push(`       ${DIM}${location}${RESET}  ${DIM}(${reviewId})${RESET}`);
-      if (finding.suggestion) {
-        lines.push(`       ${CYAN}→ ${finding.suggestion}${RESET}`);
+      lines.push(`    ${color}${i + 1}.${RESET} ${issue.description}`);
+
+      // Show references
+      for (const ref of issue.references) {
+        const location = formatRefLocation(ref);
+        lines.push(`       ${DIM}${location}${RESET}  ${DIM}(${reviewId})${RESET}`);
+        if (ref.note) {
+          lines.push(`       ${DIM}  ${ref.note}${RESET}`);
+        }
+        if (ref.code) {
+          for (const codeLine of ref.code.split("\n")) {
+            lines.push(`       ${DIM}  │ ${codeLine}${RESET}`);
+          }
+        }
+        if (ref.suggestedCode) {
+          lines.push(`       ${CYAN}  → suggested:${RESET}`);
+          for (const codeLine of ref.suggestedCode.split("\n")) {
+            lines.push(`       ${CYAN}  │ ${codeLine}${RESET}`);
+          }
+        }
+      }
+
+      if (issue.suggestion) {
+        lines.push(`       ${CYAN}→ ${issue.suggestion}${RESET}`);
       }
       lines.push("");
     }
@@ -101,4 +118,12 @@ export function renderTerminal(
   }
 
   return lines.join("\n");
+}
+
+/** Format a reference's location string: prefer symbol, fall back to file:line. */
+function formatRefLocation(ref: Reference): string {
+  if (ref.symbol) {
+    return ref.line ? `${ref.file} ${ref.symbol}:${ref.line}` : `${ref.file} ${ref.symbol}`;
+  }
+  return ref.line ? `${ref.file}:${ref.line}` : ref.file;
 }

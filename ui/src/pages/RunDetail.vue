@@ -9,7 +9,7 @@ import type {
   ReviewResults,
   TaskStatus,
   FindingSeverity,
-  FileFinding,
+  FileIssue,
 } from '../types'
 
 // =============================================================================
@@ -133,9 +133,9 @@ const taskRows = computed<TaskRow[]>(() => {
     const tr = results.value?.task_results[tid]
     let critical = 0, warning = 0, info = 0
     if (tr) {
-      for (const f of tr.findings) {
-        if (f.severity === 'critical') critical++
-        else if (f.severity === 'warning') warning++
+      for (const issue of tr.issues) {
+        if (issue.severity === 'critical') critical++
+        else if (issue.severity === 'warning') warning++
         else info++
       }
     }
@@ -186,17 +186,21 @@ interface FileRow {
 const fileRows = computed<FileRow[]>(() => {
   if (!plan.value) return []
   const rows: FileRow[] = []
-  const findingsPerFile: Record<string, number> = {}
+  const issuesPerFile: Record<string, number> = {}
   if (results.value) {
     for (const tr of Object.values(results.value.task_results)) {
-      for (const f of tr.findings) {
-        findingsPerFile[f.file] = (findingsPerFile[f.file] ?? 0) + 1
+      for (const issue of tr.issues) {
+        for (const ref of issue.references) {
+          if (ref.file) {
+            issuesPerFile[ref.file] = (issuesPerFile[ref.file] ?? 0) + 1
+          }
+        }
       }
     }
   }
   for (const f of plan.value.matched_files) {
     const parts = f.split('/')
-    rows.push({ path: f, filename: parts[parts.length - 1] ?? f, directory: parts.slice(0, -1).join('/'), matched: true, findingCount: findingsPerFile[f] ?? 0 })
+    rows.push({ path: f, filename: parts[parts.length - 1] ?? f, directory: parts.slice(0, -1).join('/'), matched: true, findingCount: issuesPerFile[f] ?? 0 })
   }
   for (const f of plan.value.unmatched_files) {
     const parts = f.split('/')
@@ -229,15 +233,15 @@ const fileCounts = computed(() => {
 
 const SEVERITY_ORDER: FindingSeverity[] = ['critical', 'warning', 'info']
 
-const selectedFileFindings = computed<FileFinding[]>(() => {
+const selectedFileIssues = computed<FileIssue[]>(() => {
   if (!selectedFilePath.value || !results.value?.by_file[selectedFilePath.value]) return []
   return results.value.by_file[selectedFilePath.value].filter(f => activeSeverities.value.has(f.severity))
 })
 
 const selectedFileCounts = computed(() => {
   const counts = { critical: 0, warning: 0, info: 0, total: 0 }
-  for (const f of selectedFileFindings.value) {
-    counts[f.severity]++
+  for (const issue of selectedFileIssues.value) {
+    counts[issue.severity]++
     counts.total++
   }
   return counts
@@ -253,32 +257,36 @@ const selectedFileCriteria = computed(() => {
   return [...new Set(results.value.by_file[selectedFilePath.value].map(f => f.review_id))]
 })
 
-interface FindingGroup { key: string; label: string; findings: FileFinding[] }
+interface IssueGroup { key: string; label: string; issues: FileIssue[] }
 
-const groupedFindings = computed<FindingGroup[]>(() => {
-  const findings = selectedFileFindings.value
-  if (findings.length === 0) return []
+const groupedIssues = computed<IssueGroup[]>(() => {
+  const issues = selectedFileIssues.value
+  if (issues.length === 0) return []
 
   if (groupMode.value === 'criterion') {
-    const groups: Record<string, FileFinding[]> = {}
-    for (const f of findings) {
-      if (!groups[f.review_id]) groups[f.review_id] = []
-      groups[f.review_id].push(f)
+    const groups: Record<string, FileIssue[]> = {}
+    for (const issue of issues) {
+      if (!groups[issue.review_id]) groups[issue.review_id] = []
+      groups[issue.review_id].push(issue)
     }
     return Object.entries(groups).map(([key, items]) => ({
       key, label: key.split('/').pop() ?? key,
-      findings: items.sort((a, b) => severityOrder(a.severity) - severityOrder(b.severity)),
+      issues: items.sort((a, b) => severityOrder(a.severity) - severityOrder(b.severity)),
     }))
   }
 
-  const groups: Record<string, FileFinding[]> = {}
+  const groups: Record<string, FileIssue[]> = {}
   for (const sev of SEVERITY_ORDER) {
-    const items = findings.filter(f => f.severity === sev)
+    const items = issues.filter(f => f.severity === sev)
     if (items.length > 0) groups[sev] = items
   }
   return Object.entries(groups).map(([key, items]) => ({
     key, label: key,
-    findings: items.sort((a, b) => (a.line ?? 0) - (b.line ?? 0)),
+    issues: items.sort((a, b) => {
+      const aLine = a.references[0]?.line ?? 0
+      const bLine = b.references[0]?.line ?? 0
+      return aLine - bLine
+    }),
   }))
 })
 
@@ -338,7 +346,7 @@ function isSeverityActive(sev: FindingSeverity): boolean {
   return activeSeverities.value.has(sev)
 }
 
-function groupHeaderClass(group: FindingGroup): string {
+function groupHeaderClass(group: IssueGroup): string {
   return groupMode.value === 'severity' ? `group-header-${group.key}` : ''
 }
 
@@ -539,7 +547,7 @@ function selectedFileName(): string {
             <h2 class="detail-filename">{{ selectedFileName() }}</h2>
             <div class="detail-path">{{ selectedFilePath }}</div>
             <div class="detail-summary">
-              {{ selectedFileCounts.total }} findings
+              {{ selectedFileCounts.total }} issues
               <template v-if="selectedFileCounts.total !== selectedFileTotalCounts.total">
                 ({{ selectedFileTotalCounts.total }} total)
               </template>
@@ -572,31 +580,49 @@ function selectedFileName(): string {
         </div>
       </div>
 
-      <div v-if="groupedFindings.length === 0" class="empty-state">
-        No findings match the current filter.
+      <div v-if="groupedIssues.length === 0" class="empty-state">
+        No issues match the current filter.
       </div>
 
-      <div v-for="group in groupedFindings" :key="group.key" class="finding-group">
+      <div v-for="group in groupedIssues" :key="group.key" class="finding-group">
         <div class="group-header" :class="groupHeaderClass(group)">
           <span class="group-name">{{ group.label }}</span>
-          <span class="group-count">{{ group.findings.length }}</span>
+          <span class="group-count">{{ group.issues.length }}</span>
         </div>
         <div
-          v-for="(finding, idx) in group.findings"
+          v-for="(issue, idx) in group.issues"
           :key="`${group.key}-${idx}`"
           class="finding-card"
-          :class="`severity-${finding.severity}`"
+          :class="`severity-${issue.severity}`"
         >
           <div class="finding-top">
-            <span class="severity-badge" :class="finding.severity">{{ finding.severity }}</span>
-            <span v-if="finding.line" class="finding-line">line {{ finding.line }}</span>
-            <span v-if="groupMode === 'severity'" class="finding-criterion">{{ finding.review_id.split('/').pop() }}</span>
+            <span class="severity-badge" :class="issue.severity">{{ issue.severity }}</span>
+            <span v-if="issue.references[0]?.symbol" class="finding-symbol">{{ issue.references[0].symbol }}</span>
+            <span v-else-if="issue.references[0]?.line" class="finding-line">line {{ issue.references[0].line }}</span>
+            <span v-if="groupMode === 'severity'" class="finding-criterion">{{ issue.review_id.split('/').pop() }}</span>
           </div>
           <!-- eslint-disable-next-line vue/no-v-html -->
-          <div class="finding-description" v-html="renderMarkdown(finding.description)" />
-          <div v-if="finding.suggestion" class="finding-suggestion">
+          <div class="finding-description" v-html="renderMarkdown(issue.description)" />
+
+          <!-- References with code snippets -->
+          <div v-for="(ref, rIdx) in issue.references" :key="rIdx" class="issue-reference">
+            <div class="ref-header">
+              <span v-if="ref.symbol" class="ref-symbol">{{ ref.symbol }}</span>
+              <span class="ref-file">{{ ref.file }}<template v-if="ref.line">:{{ ref.line }}</template></span>
+              <span v-if="ref.note" class="ref-note">{{ ref.note }}</span>
+            </div>
+            <div v-if="ref.code" class="ref-code-block">
+              <pre><code>{{ ref.code }}</code></pre>
+            </div>
+            <div v-if="ref.suggestedCode" class="ref-suggested-block">
+              <div class="ref-suggested-label">Suggested:</div>
+              <pre><code>{{ ref.suggestedCode }}</code></pre>
+            </div>
+          </div>
+
+          <div v-if="issue.suggestion" class="finding-suggestion">
             <!-- eslint-disable-next-line vue/no-v-html -->
-            <span v-html="renderMarkdown(finding.suggestion)" />
+            <span v-html="renderMarkdown(issue.suggestion)" />
           </div>
         </div>
       </div>
@@ -780,4 +806,19 @@ function selectedFileName(): string {
 .finding-suggestion :deep(p) { margin: 0 0 0.4rem; }
 .finding-suggestion :deep(p:last-child) { margin-bottom: 0; }
 .finding-suggestion :deep(code) { font-family: var(--font-mono); font-size: 0.7rem; background: var(--bg-card); padding: 0.1rem 0.3rem; border-radius: 3px; }
+.finding-symbol { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); }
+
+/* Issue references */
+.issue-reference { margin-top: 0.5rem; padding: 0.5rem 0.75rem; border-left: 2px solid var(--border); background: var(--bg-expand); border-radius: 0 4px 4px 0; }
+.ref-header { display: flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; }
+.ref-symbol { font-family: var(--font-mono); font-weight: 600; color: var(--text-secondary); }
+.ref-file { font-family: var(--font-mono); color: var(--text-muted); font-size: 0.65rem; }
+.ref-note { font-style: italic; font-size: 0.65rem; color: var(--text-muted); }
+.ref-code-block { margin-top: 0.35rem; }
+.ref-code-block pre { margin: 0; padding: 0.4rem 0.6rem; background: var(--bg-secondary); border-radius: 4px; font-size: 0.7rem; font-family: var(--font-mono); overflow-x: auto; line-height: 1.4; }
+.ref-code-block code { font-family: inherit; font-size: inherit; }
+.ref-suggested-block { margin-top: 0.35rem; }
+.ref-suggested-label { font-size: 0.6rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.15rem; }
+.ref-suggested-block pre { margin: 0; padding: 0.4rem 0.6rem; background: rgba(79, 195, 247, 0.05); border: 1px solid rgba(79, 195, 247, 0.15); border-radius: 4px; font-size: 0.7rem; font-family: var(--font-mono); overflow-x: auto; line-height: 1.4; }
+.ref-suggested-block code { font-family: inherit; font-size: inherit; }
 </style>

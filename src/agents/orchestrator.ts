@@ -5,7 +5,8 @@ import { ReviewStorage } from "../core/storage.js";
 import { extractContext } from "../core/context-extractor.js";
 import { buildExecutorPrompt } from "./executor-prompt.js";
 import type {
-  Finding,
+  Issue,
+  Reference,
   FindingSeverity,
   ReviewConfig,
   ReviewTask,
@@ -19,10 +20,10 @@ import type {
 /** Events yielded by the orchestrator's execute() async generator. */
 export type OrchestratorEvent =
   | { type: "task_started"; taskId: string; reviewId: string; model: string; files: string[] }
-  | { type: "task_completed"; taskId: string; reviewId: string; files: string[]; findingCount: number; usage: TaskUsage | null }
+  | { type: "task_completed"; taskId: string; reviewId: string; files: string[]; issueCount: number; usage: TaskUsage | null }
   | { type: "task_error"; taskId: string; reviewId: string; files: string[]; error: string }
   | { type: "batch_progress"; completed: number; total: number }
-  | { type: "complete"; totalFindings: number };
+  | { type: "complete"; totalIssues: number };
 
 // =============================================================================
 // Helpers
@@ -35,13 +36,52 @@ const VALID_SEVERITIES: ReadonlySet<string> = new Set<FindingSeverity>([
 ]);
 
 /**
- * Parse executor output into a validated array of findings.
+ * Parse a single reference object from executor output.
+ */
+function parseReference(raw: Record<string, unknown>): Reference {
+  return {
+    file: String(raw.file ?? ""),
+    symbol: typeof raw.symbol === "string" ? raw.symbol : null,
+    line: typeof raw.line === "number" ? raw.line : null,
+    code: typeof raw.code === "string" ? raw.code : null,
+    suggestedCode: typeof raw.suggestedCode === "string" ? raw.suggestedCode : null,
+    note: typeof raw.note === "string" ? raw.note : null,
+  };
+}
+
+/**
+ * Convert a legacy Finding-shaped object to the new Issue format.
+ * A Finding with {file, line} becomes an Issue with one Reference.
+ */
+function legacyFindingToIssue(record: Record<string, unknown>): Issue {
+  const severity = String(record.severity ?? "info") as FindingSeverity;
+  return {
+    severity,
+    description: String(record.description ?? ""),
+    suggestion: typeof record.suggestion === "string" ? record.suggestion : null,
+    references: [{
+      file: String(record.file ?? ""),
+      symbol: null,
+      line: typeof record.line === "number" ? record.line : null,
+      code: null,
+      suggestedCode: null,
+      note: null,
+    }],
+  };
+}
+
+/**
+ * Parse executor output into a validated array of issues.
  *
  * The executor is instructed to output only a JSON array. This function
  * extracts the JSON from the response text, handles cases where the agent
- * wraps it in markdown fences, and validates each finding's structure.
+ * wraps it in markdown fences, and validates each item's structure.
+ *
+ * Backwards compatible: if an item has the old Finding shape ({file, line}
+ * at top level, no references), it is automatically converted to an Issue
+ * with a single Reference.
  */
-function parseFindings(output: string): Finding[] {
+function parseIssues(output: string): Issue[] {
   // Try to extract JSON array from the output
   let jsonText = output.trim();
 
@@ -74,31 +114,47 @@ function parseFindings(output: string): Finding[] {
     return [];
   }
 
-  // Validate and normalize each finding
-  const findings: Finding[] = [];
+  // Validate and normalize each issue
+  const issues: Issue[] = [];
   for (const item of parsed) {
     if (typeof item !== "object" || item === null) {
-      console.error(`[deskcheck] Warning: skipping invalid finding (not an object): ${JSON.stringify(item).slice(0, 100)}`);
+      console.error(`[deskcheck] Warning: skipping invalid issue (not an object): ${JSON.stringify(item).slice(0, 100)}`);
       continue;
     }
 
     const record = item as Record<string, unknown>;
     const severity = String(record.severity ?? "info");
     if (!VALID_SEVERITIES.has(severity)) {
-      console.error(`[deskcheck] Warning: skipping finding with invalid severity "${severity}"`);
+      console.error(`[deskcheck] Warning: skipping issue with invalid severity "${severity}"`);
       continue;
     }
 
-    findings.push({
-      severity: severity as FindingSeverity,
-      file: String(record.file ?? ""),
-      line: typeof record.line === "number" ? record.line : null,
-      description: String(record.description ?? ""),
-      suggestion: typeof record.suggestion === "string" ? record.suggestion : null,
-    });
+    // Detect format: new Issue format has `references` array, old Finding has `file` at top level
+    if (Array.isArray(record.references)) {
+      // New Issue format
+      const references: Reference[] = [];
+      for (const ref of record.references) {
+        if (typeof ref === "object" && ref !== null) {
+          references.push(parseReference(ref as Record<string, unknown>));
+        }
+      }
+      if (references.length === 0) {
+        console.error(`[deskcheck] Warning: skipping issue with empty references array`);
+        continue;
+      }
+      issues.push({
+        severity: severity as FindingSeverity,
+        description: String(record.description ?? ""),
+        suggestion: typeof record.suggestion === "string" ? record.suggestion : null,
+        references,
+      });
+    } else {
+      // Legacy Finding format — convert to Issue with one reference
+      issues.push(legacyFindingToIssue(record));
+    }
   }
 
-  return findings;
+  return issues;
 }
 
 /**
@@ -196,7 +252,7 @@ export class ReviewOrchestrator {
     const pendingTasks = storage.getPendingTasks(planId);
 
     if (pendingTasks.length === 0) {
-      yield { type: "complete", totalFindings: 0 };
+      yield { type: "complete", totalIssues: 0 };
       return;
     }
 
@@ -204,7 +260,7 @@ export class ReviewOrchestrator {
     const mcpServers = buildMcpServers(this.config);
 
     let completedCount = 0;
-    let totalFindings = 0;
+    let totalIssues = 0;
     const total = pendingTasks.length;
 
     // Event queue: executor promises push events here, generator yields them
@@ -306,21 +362,21 @@ export class ReviewOrchestrator {
           clearTimeout(timeout);
         }
 
-        // Parse findings from executor output
-        const findings = parseFindings(resultText);
+        // Parse issues from executor output
+        const issues = parseIssues(resultText);
 
         // Complete the task in storage
-        storage.completeTask(planId, task.task_id, findings, taskUsage);
+        storage.completeTask(planId, task.task_id, issues, taskUsage);
 
         completedCount++;
-        totalFindings += findings.length;
+        totalIssues += issues.length;
 
         pushEvent({
           type: "task_completed",
           taskId: task.task_id,
           reviewId: task.review_id,
           files: task.files,
-          findingCount: findings.length,
+          issueCount: issues.length,
           usage: taskUsage,
         });
 
@@ -414,6 +470,6 @@ export class ReviewOrchestrator {
     }
 
     // Final completion event
-    yield { type: "complete", totalFindings };
+    yield { type: "complete", totalIssues };
   }
 }

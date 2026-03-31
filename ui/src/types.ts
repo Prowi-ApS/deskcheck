@@ -1,7 +1,7 @@
 /** Severity level assigned to a criterion. */
 export type ModuleSeverity = 'critical' | 'high' | 'medium' | 'low'
 
-/** Severity level assigned to an individual finding. */
+/** Severity level assigned to an individual issue. */
 export type FindingSeverity = 'critical' | 'warning' | 'info'
 
 /** Lifecycle status of a deskcheck plan. */
@@ -63,17 +63,26 @@ export interface ReviewPlan {
   modules: Record<string, ModuleSummary>
 }
 
-/** A single finding produced by an executor agent. */
-export interface Finding {
-  severity: FindingSeverity
+/** A code location referenced by an issue. */
+export interface Reference {
   file: string
+  symbol: string | null
   line: number | null
-  description: string
-  suggestion: string | null
+  code: string | null
+  suggestedCode: string | null
+  note: string | null
 }
 
-/** A finding enriched with source module and task. */
-export interface FileFinding extends Finding {
+/** A single issue produced by an executor agent. */
+export interface Issue {
+  severity: FindingSeverity
+  description: string
+  suggestion: string | null
+  references: Reference[]
+}
+
+/** An issue enriched with source module and task. */
+export interface FileIssue extends Issue {
   review_id: string
   task_id: string
 }
@@ -109,12 +118,12 @@ export interface TaskResult {
   review_id: string
   files: string[]
   completed_at: string
-  findings: Finding[]
+  issues: Issue[]
   usage: TaskUsage | null
 }
 
-/** Aggregated findings for a single criterion. */
-export interface ModuleFindings {
+/** Aggregated issues for a single criterion. */
+export interface ModuleIssues {
   review_id: string
   description: string
   severity: ModuleSeverity
@@ -126,7 +135,7 @@ export interface ModuleFindings {
     info: number
     total: number
   }
-  findings: Finding[]
+  issues: Issue[]
 }
 
 /** The complete deskcheck results. */
@@ -148,8 +157,8 @@ export interface ReviewResults {
     info: number
   }
   task_results: Record<string, TaskResult>
-  by_file: Record<string, FileFinding[]>
-  by_module: Record<string, ModuleFindings>
+  by_file: Record<string, FileIssue[]>
+  by_module: Record<string, ModuleIssues>
   total_usage?: TotalUsage
 }
 

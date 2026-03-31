@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ReviewConfig, AgentModel, Finding } from "../core/types.js";
+import type { ReviewConfig, AgentModel, Issue, Reference } from "../core/types.js";
 import { ReviewStorage } from "../core/storage.js";
 import { extractContext } from "../core/context-extractor.js";
 import { discoverModules, parseModule } from "../core/module-parser.js";
@@ -314,43 +314,55 @@ export function registerReviewTools(
 
   server.registerTool("finish_review", {
     description:
-      "Complete a review task by submitting findings. Updates both plan.json and results.json.",
+      "Complete a review task by submitting issues. Updates both plan.json and results.json.",
     inputSchema: {
       plan_id: z.string().describe("The plan ID"),
       task_id: z.string().describe("The task ID to complete"),
-      findings: z
+      issues: z
         .array(
           z.object({
             severity: z
               .enum(["critical", "warning", "info"])
-              .describe("Finding severity"),
-            file: z.string().describe("File path where the issue was found"),
-            line: z
-              .number()
-              .nullable()
-              .optional()
-              .describe("Line number, if applicable"),
+              .describe("Issue severity"),
             description: z.string().describe("Description of the issue"),
             suggestion: z
               .string()
               .nullable()
               .optional()
-              .describe("Suggested fix, if applicable"),
+              .describe("High-level suggested fix, if applicable"),
+            references: z
+              .array(
+                z.object({
+                  file: z.string().describe("File path"),
+                  symbol: z.string().nullable().optional().describe("Semantic symbol anchor, e.g. ClassName::method"),
+                  line: z.number().nullable().optional().describe("Line number for navigation"),
+                  code: z.string().nullable().optional().describe("Current code snippet"),
+                  suggestedCode: z.string().nullable().optional().describe("Suggested replacement code"),
+                  note: z.string().nullable().optional().describe("Why this reference is relevant"),
+                }),
+              )
+              .describe("Code locations where the issue manifests"),
           }),
         )
-        .describe("Array of findings from the review"),
+        .describe("Array of issues from the review"),
     },
-  }, ({ plan_id, task_id, findings }) => {
+  }, ({ plan_id, task_id, issues }) => {
     try {
-      const normalizedFindings: Finding[] = findings.map((f) => ({
-        severity: f.severity,
-        file: f.file,
-        line: f.line ?? null,
-        description: f.description,
-        suggestion: f.suggestion ?? null,
+      const normalizedIssues: Issue[] = issues.map((i) => ({
+        severity: i.severity,
+        description: i.description,
+        suggestion: i.suggestion ?? null,
+        references: i.references.map((r): Reference => ({
+          file: r.file,
+          symbol: r.symbol ?? null,
+          line: r.line ?? null,
+          code: r.code ?? null,
+          suggestedCode: r.suggestedCode ?? null,
+          note: r.note ?? null,
+        })),
       }));
 
-      storage.completeTask(plan_id, task_id, normalizedFindings);
+      storage.completeTask(plan_id, task_id, normalizedIssues);
 
       const plan = storage.getPlan(plan_id);
       const task = plan.tasks[task_id];
@@ -362,7 +374,7 @@ export function registerReviewTools(
             task_id: task.task_id,
             status: task.status,
             completed_at: task.completed_at,
-            findings_count: normalizedFindings.length,
+            issues_count: normalizedIssues.length,
             plan_status: plan.status,
           }, null, 2),
         }],

@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type {
   ContextType,
-  Finding,
-  FileFinding,
-  ModuleFindings,
+  Issue,
+  FileIssue,
+  ModuleIssues,
   ModuleSummary,
   ReviewPlan,
   ReviewResults,
@@ -414,7 +414,7 @@ export class ReviewStorage {
   completeTask(
     planId: string,
     taskId: string,
-    findings: Finding[],
+    issues: Issue[],
     usage?: TaskUsage | null,
   ): void {
     this.withLock(planId, () => {
@@ -451,7 +451,7 @@ export class ReviewStorage {
         review_id: task.review_id,
         files: task.files,
         completed_at: now,
-        findings,
+        issues,
         usage: usage ?? null,
       };
 
@@ -497,7 +497,7 @@ export class ReviewStorage {
 
       this.writePlan(planId, plan);
 
-      // Add task result to results.json (with empty findings but preserving usage data)
+      // Add task result to results.json (with empty issues but preserving usage data)
       const results = this.loadOrCreateResults(planId);
 
       if (usage) {
@@ -506,7 +506,7 @@ export class ReviewStorage {
           review_id: task.review_id,
           files: task.files,
           completed_at: now,
-          findings: [],
+          issues: [],
           usage: usage ?? null,
         };
         results.task_results[taskId] = taskResult;
@@ -660,38 +660,46 @@ export class ReviewStorage {
       errored: tasks.filter((t) => t.status === "error").length,
     };
 
-    // ---- Summary (aggregate finding counts) ----
+    // ---- Summary (aggregate issue counts) ----
     const summary = { total: 0, critical: 0, warning: 0, info: 0 };
 
     for (const taskResult of Object.values(results.task_results)) {
-      for (const finding of taskResult.findings) {
+      for (const issue of taskResult.issues) {
         summary.total++;
-        summary[finding.severity]++;
+        summary[issue.severity]++;
       }
     }
     results.summary = summary;
 
-    // ---- by_file (group all findings by file path) ----
-    const byFile: Record<string, FileFinding[]> = {};
+    // ---- by_file (group issues by reference file paths) ----
+    // An issue can appear under multiple files if it has multiple references.
+    const byFile: Record<string, FileIssue[]> = {};
 
     for (const taskResult of Object.values(results.task_results)) {
-      for (const finding of taskResult.findings) {
-        const fileFinding: FileFinding = {
-          ...finding,
+      for (const issue of taskResult.issues) {
+        const fileIssue: FileIssue = {
+          ...issue,
           review_id: taskResult.review_id,
           task_id: taskResult.task_id,
         };
 
-        if (!byFile[finding.file]) {
-          byFile[finding.file] = [];
+        // Index under each referenced file path
+        const seenFiles = new Set<string>();
+        for (const ref of issue.references) {
+          if (ref.file && !seenFiles.has(ref.file)) {
+            seenFiles.add(ref.file);
+            if (!byFile[ref.file]) {
+              byFile[ref.file] = [];
+            }
+            byFile[ref.file].push(fileIssue);
+          }
         }
-        byFile[finding.file].push(fileFinding);
       }
     }
     results.by_file = byFile;
 
-    // ---- by_module (group findings by criterion) ----
-    const byModule: Record<string, ModuleFindings> = {};
+    // ---- by_module (group issues by criterion) ----
+    const byModule: Record<string, ModuleIssues> = {};
 
     for (const taskResult of Object.values(results.task_results)) {
       const reviewId = taskResult.review_id;
@@ -706,17 +714,17 @@ export class ReviewStorage {
           task_count: moduleSummary?.task_count ?? 0,
           completed: 0,
           counts: { critical: 0, warning: 0, info: 0, total: 0 },
-          findings: [],
+          issues: [],
         };
       }
 
-      const moduleFindings = byModule[reviewId];
-      moduleFindings.completed++;
+      const moduleIssues = byModule[reviewId];
+      moduleIssues.completed++;
 
-      for (const finding of taskResult.findings) {
-        moduleFindings.counts.total++;
-        moduleFindings.counts[finding.severity]++;
-        moduleFindings.findings.push(finding);
+      for (const issue of taskResult.issues) {
+        moduleIssues.counts.total++;
+        moduleIssues.counts[issue.severity]++;
+        moduleIssues.issues.push(issue);
       }
     }
     results.by_module = byModule;
