@@ -53,7 +53,7 @@ export class ReviewPlanner {
     // Create an in-process MCP server with planning tools
     const plannerServer = createSdkMcpServer({
       name: "deskcheck-planner",
-      version: "0.1.0",
+      version: "0.2.0",
       tools: [
         tool(
           "create_plan",

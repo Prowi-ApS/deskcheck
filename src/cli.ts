@@ -393,7 +393,7 @@ const program = new Command();
 program
   .name("deskcheck")
   .description("Modular code deskcheck tool powered by Claude")
-  .version("0.1.0");
+  .version("0.2.0");
 
 // Default command: natural language deskcheck
 program

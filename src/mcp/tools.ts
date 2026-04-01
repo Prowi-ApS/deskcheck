@@ -33,7 +33,7 @@ export function registerReviewTools(
     return {
       content: [{
         type: "text" as const,
-        text: JSON.stringify({ status: "ok", version: "0.1.0" }, null, 2),
+        text: JSON.stringify({ status: "ok", version: "0.2.0" }, null, 2),
       }],
     };
   });
