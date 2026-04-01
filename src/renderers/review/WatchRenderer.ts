@@ -83,7 +83,7 @@ export function renderWatch(plan: ReviewPlan, results: ReviewResults | null): st
 
       // Count findings for this task from results
       if (results?.task_results[task.task_id]) {
-        moduleFindings += results.task_results[task.task_id].findings.length;
+        moduleFindings += results.task_results[task.task_id].issues.length;
       }
     }
 
@@ -103,7 +103,7 @@ export function renderWatch(plan: ReviewPlan, results: ReviewResults | null): st
 
       let taskSuffix = "";
       if (task.status === "complete" && results?.task_results[task.task_id]) {
-        const count = results.task_results[task.task_id].findings.length;
+        const count = results.task_results[task.task_id].issues.length;
         taskSuffix = count > 0 ? ` ${DIM}(${count} findings)${RESET}` : ` ${DIM}(clean)${RESET}`;
       } else if (task.status === "error") {
         taskSuffix = ` ${RED}(error)${RESET}`;

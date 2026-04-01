@@ -2,7 +2,7 @@ import path from "node:path";
 import { ReviewStorageService } from "./ReviewStorageService.js";
 import { extractContext } from "./ReviewContextExtractorService.js";
 import { buildExecutorPrompt } from "../../prompts/ExecutorPrompt.js";
-import { parseFindings } from "../FindingsParserService.js";
+import { parseIssues } from "../FindingsParserService.js";
 import { ExecutorService } from "../ExecutorService.js";
 import type { ReviewConfig } from "../../config/types.js";
 import type {
@@ -17,10 +17,10 @@ import type {
 /** Events yielded by the orchestrator's execute() async generator. */
 export type OrchestratorEvent =
   | { type: "task_started"; taskId: string; reviewId: string; model: string; files: string[] }
-  | { type: "task_completed"; taskId: string; reviewId: string; files: string[]; findingCount: number; usage: TaskUsage | null }
+  | { type: "task_completed"; taskId: string; reviewId: string; files: string[]; issueCount: number; usage: TaskUsage | null }
   | { type: "task_error"; taskId: string; reviewId: string; files: string[]; error: string }
   | { type: "batch_progress"; completed: number; total: number }
-  | { type: "complete"; totalFindings: number };
+  | { type: "complete"; totalIssues: number };
 
 // =============================================================================
 // ReviewOrchestratorService
@@ -63,12 +63,12 @@ export class ReviewOrchestratorService {
     const pendingTasks = storage.getPendingTasks(planId);
 
     if (pendingTasks.length === 0) {
-      yield { type: "complete", totalFindings: 0 };
+      yield { type: "complete", totalIssues: 0 };
       return;
     }
 
     let completedCount = 0;
-    let totalFindings = 0;
+    let totalIssues = 0;
     const total = pendingTasks.length;
 
     // Event queue: executor promises push events here, generator yields them
@@ -128,21 +128,21 @@ export class ReviewOrchestratorService {
         const result = await this.executorService.execute(executorPrompt, modelId);
         taskUsage = result.usage;
 
-        // Parse findings from executor output
-        const findings = parseFindings(result.resultText);
+        // Parse issues from executor output
+        const issues = parseIssues(result.resultText);
 
         // Complete the task in storage
-        storage.completeTask(planId, task.task_id, findings, taskUsage);
+        storage.completeTask(planId, task.task_id, issues, taskUsage);
 
         completedCount++;
-        totalFindings += findings.length;
+        totalIssues += issues.length;
 
         pushEvent({
           type: "task_completed",
           taskId: task.task_id,
           reviewId: task.review_id,
           files: task.files,
-          findingCount: findings.length,
+          issueCount: issues.length,
           usage: taskUsage,
         });
 
@@ -236,6 +236,6 @@ export class ReviewOrchestratorService {
     }
 
     // Final completion event
-    yield { type: "complete", totalFindings };
+    yield { type: "complete", totalIssues };
   }
 }

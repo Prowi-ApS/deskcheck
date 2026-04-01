@@ -71,22 +71,53 @@ function buildContextTypeGuidance(contextType: string): string {
 
 /** Instructions for the executor's output format. */
 function buildOutputInstructions(): string {
-  return `## Output Format
+  return `## Your Task
+1. Read the review instructions carefully
+2. Analyze the code provided in the context
+3. Report issues as a JSON array to stdout
 
-Output ONLY a JSON array of findings. No text before or after — just the JSON array.
-
-Each finding:
+Output ONLY a JSON array of issues. Each issue has references pointing to one or more code locations:
 \`\`\`json
-{"severity": "critical|warning|info", "file": "path", "line": null, "description": "...", "suggestion": null}
+{
+  "severity": "critical|warning|info",
+  "description": "What's wrong",
+  "suggestion": "How to fix it (high-level), or null",
+  "references": [
+    {
+      "file": "path/to/file",
+      "symbol": "ClassName::method or null",
+      "line": 42,
+      "code": "the current code snippet, or null",
+      "suggestedCode": "what it should look like, or null",
+      "note": "why this location is relevant, or null"
+    }
+  ]
+}
 \`\`\`
 
+### Field guide
+
 - \`severity\`: Use the severity levels defined in the criterion above. If the criterion defines when something is "critical" vs "warning" vs "info", follow those definitions exactly.
-- \`file\`: the file path where the issue was found
-- \`line\`: line number if applicable, or null
-- \`description\`: what the criterion check found — reference the specific check from the criterion
-- \`suggestion\`: suggested fix, or null
+- \`description\`: clear description of the issue — reference the specific check from the criterion
+- \`suggestion\`: high-level fix suggestion, or null
+- \`references\`: array of code locations where the issue manifests (at least one required)
+  - \`file\`: the file path
+  - \`symbol\`: semantic anchor like "ClassName::method" or "ClassName::$property" — stable across refactors. Use null if not applicable.
+  - \`line\`: line number for navigation, or null
+  - \`code\`: include the relevant code snippet so the reviewer can understand the issue without opening the file. Keep it focused (the relevant function/block, not the entire file).
+  - \`suggestedCode\`: when suggesting a fix, show what the code should look like. Use null when the fix is better described in the top-level \`suggestion\`.
+  - \`note\`: brief context for why this reference matters (e.g. "First occurrence", "Duplicated", "Missing return type"). Use null when obvious.
 
-If no violations of the criterion are found, output an empty array: \`[]\`
+### When to use multiple references
 
-Do NOT output any text outside the JSON array.`;
+- **Cross-file issues**: duplicated patterns across files, missing consistency between related files
+- **Single-file issues**: just use one reference
+
+### Code snippets
+
+Include relevant code snippets in \`code\` so the reviewer can understand the issue without opening their editor. When suggesting a fix, include \`suggestedCode\` to show the before/after clearly.
+
+If no issues found, output an empty array: []
+
+Do NOT output any text outside the JSON array. No explanations, no markdown, no commentary — just the JSON array.`;
 }
