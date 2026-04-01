@@ -1,5 +1,5 @@
-import type { ReviewPlan, ReviewResults } from "../../types/review.js";
-import { groupFindingsBySeveritySection } from "../shared.js";
+import type { ReviewPlan, ReviewResults, Reference } from "../../types/review.js";
+import { groupIssuesBySeveritySection } from "../shared.js";
 
 /** Render review results as markdown suitable for PR comments. */
 export function renderMarkdown(
@@ -17,22 +17,33 @@ export function renderMarkdown(
   const completed = results.completion.completed;
   const totalTasks = results.completion.total;
   lines.push(
-    `**${total} findings** (${critical} critical, ${warning} warning, ${info} info) | ${completed}/${totalTasks} tasks`,
+    `**${total} issues** (${critical} critical, ${warning} warning, ${info} info) | ${completed}/${totalTasks} tasks`,
   );
   lines.push("");
 
-  // Findings grouped by severity
-  for (const section of groupFindingsBySeveritySection(results)) {
+  // Issues grouped by severity
+  for (const section of groupIssuesBySeveritySection(results)) {
     lines.push(`### ${section.label}`);
-    for (const { finding, reviewId } of section.findings) {
-      const location = finding.line
-        ? `${finding.file}:${finding.line}`
-        : finding.file;
+    for (const { issue, reviewId } of section.issues) {
       lines.push(
-        `- **${location}** — ${finding.description} *(from ${reviewId})*`,
+        `- ${issue.description} *(from ${reviewId})*`,
       );
-      if (finding.suggestion) {
-        lines.push(`  > ${finding.suggestion}`);
+
+      // Show references
+      for (const ref of issue.references) {
+        const location = formatRefLocation(ref);
+        lines.push(`  - \`${location}\`${ref.note ? ` — ${ref.note}` : ""}`);
+        if (ref.code) {
+          lines.push(`    \`\`\`\n    ${ref.code.split("\n").join("\n    ")}\n    \`\`\``);
+        }
+        if (ref.suggestedCode) {
+          lines.push(`    **Suggested:**`);
+          lines.push(`    \`\`\`\n    ${ref.suggestedCode.split("\n").join("\n    ")}\n    \`\`\``);
+        }
+      }
+
+      if (issue.suggestion) {
+        lines.push(`  > ${issue.suggestion}`);
       }
     }
     lines.push("");
@@ -48,4 +59,12 @@ export function renderMarkdown(
   }
 
   return lines.join("\n");
+}
+
+/** Format a reference's location string for markdown. */
+function formatRefLocation(ref: Reference): string {
+  if (ref.symbol) {
+    return ref.line ? `${ref.file} ${ref.symbol}:${ref.line}` : `${ref.file} ${ref.symbol}`;
+  }
+  return ref.line ? `${ref.file}:${ref.line}` : ref.file;
 }

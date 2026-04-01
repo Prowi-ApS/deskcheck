@@ -145,26 +145,56 @@ export interface TotalUsage {
 // Storage Types — results.json
 // =============================================================================
 
-/** A single finding produced by an executor agent. */
-export interface Finding {
-  /** How severe this finding is. */
-  severity: FindingSeverity;
-  /** File path where the issue was found. */
+/** A code location referenced by an issue. */
+export interface Reference {
+  /** File path where the issue manifests. */
   file: string;
-  /** Line number where the issue occurs, if applicable. */
+  /** Semantic symbol anchor, e.g. "ClassName::method". Stable across refactors. */
+  symbol: string | null;
+  /** Line number for navigation, not the primary identifier. */
   line: number | null;
-  /** Description of the issue. */
-  description: string;
-  /** Suggested fix or improvement, if applicable. */
-  suggestion: string | null;
+  /** The current code at this location (for self-contained review). */
+  code: string | null;
+  /** Suggested replacement code (optional fix). */
+  suggestedCode: string | null;
+  /** Why this reference is relevant to the issue. */
+  note: string | null;
 }
 
-/** A finding enriched with its source module and task for by-file grouping. */
-export interface FileFinding extends Finding {
-  /** Which criterion produced this finding. */
+/** A single issue produced by an executor agent. */
+export interface Issue {
+  /** Stable identity, stamped by recomputeAggregations as `${task_id}:${index}`. */
+  issue_id?: string;
+  /** How severe this issue is. */
+  severity: FindingSeverity;
+  /** Description of what's wrong. */
+  description: string;
+  /** High-level suggested fix or improvement, if applicable. */
+  suggestion: string | null;
+  /** Where this issue manifests — one or more code locations. */
+  references: Reference[];
+}
+
+/** An issue enriched with its source module and task for by-file grouping. */
+export interface FileIssue extends Issue {
+  /** Stable identity, always present on FileIssue (narrowed from optional). */
+  issue_id: string;
+  /** Which criterion produced this issue. */
   review_id: string;
-  /** Which task produced this finding. */
+  /** Which task produced this issue. */
   task_id: string;
+}
+
+/**
+ * Legacy Finding type for backwards compatibility with old executor output.
+ * @deprecated Use Issue instead.
+ */
+export interface Finding {
+  severity: FindingSeverity;
+  file: string;
+  line: number | null;
+  description: string;
+  suggestion: string | null;
 }
 
 /** Results from a single completed task. */
@@ -177,14 +207,14 @@ export interface TaskResult {
   files: string[];
   /** ISO 8601 timestamp when the task completed. */
   completed_at: string;
-  /** Findings produced by the executor agent. */
-  findings: Finding[];
+  /** Issues produced by the executor agent. */
+  issues: Issue[];
   /** Token usage and timing from the executor agent. Null for legacy results. */
   usage: TaskUsage | null;
 }
 
-/** Aggregated findings for a single criterion. */
-export interface ModuleFindings {
+/** Aggregated issues for a single criterion. */
+export interface ModuleIssues {
   /** Review module identifier. */
   review_id: string;
   /** Human-readable description. */
@@ -195,15 +225,15 @@ export interface ModuleFindings {
   task_count: number;
   /** Number of completed tasks. */
   completed: number;
-  /** Aggregated finding counts by severity. */
+  /** Aggregated issue counts by severity. */
   counts: {
     critical: number;
     warning: number;
     info: number;
     total: number;
   };
-  /** All findings from this module's tasks. */
-  findings: Finding[];
+  /** All issues from this module's tasks. */
+  issues: Issue[];
 }
 
 /** The complete deskcheck results written to results.json. */
@@ -224,7 +254,7 @@ export interface ReviewResults {
     errored: number;
   };
 
-  /** Aggregated finding counts across all tasks. */
+  /** Aggregated issue counts across all tasks. */
   summary: {
     total: number;
     critical: number;
@@ -234,10 +264,10 @@ export interface ReviewResults {
 
   /** Per-task results keyed by task_id. */
   task_results: Record<string, TaskResult>;
-  /** Findings grouped by file path. */
-  by_file: Record<string, FileFinding[]>;
-  /** Findings grouped by criterion. */
-  by_module: Record<string, ModuleFindings>;
+  /** Issues grouped by file path (an issue appears under each referenced file). */
+  by_file: Record<string, FileIssue[]>;
+  /** Issues grouped by criterion. */
+  by_module: Record<string, ModuleIssues>;
   /** Aggregated token usage across all completed tasks. */
   total_usage: TotalUsage;
 }
