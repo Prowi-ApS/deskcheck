@@ -3,3 +3,4 @@ build/
 ui/dist/
 ui/node_modules/
 .claude/
+.playwright-mcp/
