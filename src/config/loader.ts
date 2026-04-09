@@ -13,7 +13,8 @@ export const DEFAULT_CONFIG: ReviewConfig = {
     mcp_servers: {},
   },
   agents: {
-    planner: { model: "haiku" },
+    resolver: { model: "haiku" },
+    partitioner: { model: "haiku" },
     executor: {},
     evaluator: { model: "haiku" },
     judge: { model: "opus" },

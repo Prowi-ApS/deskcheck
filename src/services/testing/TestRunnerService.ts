@@ -127,10 +127,7 @@ export class TestRunnerService {
       status: "executing",
     });
 
-    // Step 2: Read the fixture file
-    const fixtureContent = fs.readFileSync(testCase.fixtureFile, "utf-8");
-
-    // Step 3: Parse the criterion
+    // Step 2: Parse the criterion
     // criterionFile is relative to the parent of the criteria dir (e.g. "criteria/backend/controller-conventions.md")
     // The criteria dir config value is e.g. "deskcheck/criteria", so the parent is "deskcheck/"
     // parseCriterion needs the absolute file path and the absolute criteria dir as base
@@ -138,21 +135,23 @@ export class TestRunnerService {
     const absoluteCriterionFile = path.resolve(path.dirname(criteriaDir), testCase.criterionFile);
     const criterion = parseCriterion(absoluteCriterionFile, criteriaDir);
 
-    // Step 4: Build a synthetic ReviewTask for the executor
+    // Step 3: Build a synthetic ReviewTask for the executor. The reviewer
+    // will Read the fixture file itself via its built-in tools.
     const task: ReviewTask = {
       task_id: `test-${testCase.criterionId}-${testCase.name}`,
       review_id: testCase.criterionId,
       review_file: testCase.criterionFile,
       files: [testCase.fixtureFile],
+      scope: { type: "all" },
+      focus: null,
       hint: null,
       model: criterion.model,
+      tools: criterion.tools,
+      error: null,
       status: "pending",
       created_at: new Date().toISOString(),
       started_at: null,
       completed_at: null,
-      context_type: "file",
-      context: fixtureContent,
-      symbol: null,
       prompt: criterion.prompt,
     };
 
@@ -173,7 +172,9 @@ export class TestRunnerService {
     // Step 8: Read expected.md
     const expectedContent = fs.readFileSync(testCase.expectedFile, "utf-8");
 
-    // Step 9: Judge findings against expectations
+    // Step 9: Judge findings against expectations. The judge needs the
+    // fixture content for context, so we read it here.
+    const fixtureContent = fs.readFileSync(testCase.fixtureFile, "utf-8");
     const judgeOutput = await judgeService.evaluate(
       criterion,
       expectedContent,

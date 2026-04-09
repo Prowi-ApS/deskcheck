@@ -68,8 +68,11 @@ function makePlan(): ReviewPlan {
   return {
     plan_id: "2026-03-31_120000",
     name: "feature/order-rework vs develop",
-    source: { type: "diff", target: "develop" },
+    invocation: { command: "deskcheck", args: ["diff", "develop"], cwd: "/tmp" },
+    scope: { type: "changes", ref: "develop" },
     status: "complete",
+    step: "complete",
+    failure: null,
     created_at: "2026-03-31T12:00:00Z",
     finalized_at: "2026-03-31T12:00:00Z",
     started_at: "2026-03-31T12:00:00Z",
@@ -78,6 +81,7 @@ function makePlan(): ReviewPlan {
     unmatched_files: ["README.md"],
     tasks: {},
     modules: {},
+    partition_decisions: {},
   };
 }
 

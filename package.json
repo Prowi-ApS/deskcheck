@@ -1,6 +1,6 @@
 {
   "name": "@prowi/deskcheck",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Modular code review tool powered by Claude Agent SDK — define review criteria as markdown, run them against your codebase, get structured findings with a web dashboard.",
   "license": "MIT",
   "repository": {
@@ -23,6 +23,7 @@
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "seed": "tsx scripts/seed-fixtures.ts",
     "prepublishOnly": "npm run build && cd ui && npm ci && npx vite build"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"
   }

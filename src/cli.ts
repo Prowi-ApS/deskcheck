@@ -7,7 +7,8 @@ import { loadConfig, DEFAULT_CONFIG } from "./config/loader.js";
 import { ReviewStorageService } from "./services/review/ReviewStorageService.js";
 import { discoverModules, filterModules } from "./services/criteria/module-parser.js";
 import { buildPlanWithTasks } from "./services/review/ReviewPlanBuilderService.js";
-import { ReviewPlannerService } from "./services/review/ReviewPlannerService.js";
+import { ReviewInputResolverService } from "./services/review/ReviewInputResolverService.js";
+import { ReviewPartitionerService } from "./services/review/ReviewPartitionerService.js";
 import { ReviewOrchestratorService } from "./services/review/ReviewOrchestratorService.js";
 import { renderTerminal } from "./renderers/review/TerminalRenderer.js";
 import { renderMarkdown } from "./renderers/review/MarkdownRenderer.js";
@@ -17,7 +18,7 @@ import { startServer } from "./server/server.js";
 import { discoverTests } from "./services/testing/TestDiscoveryService.js";
 import { TestRunnerService } from "./services/testing/TestRunnerService.js";
 import { renderTestResults } from "./renderers/test/TerminalRenderer.js";
-import type { ReviewResults, ReviewPlan, FindingSeverity } from "./types/review.js";
+import type { ReviewResults, ReviewPlan, Scope, PlanInvocation, FindingSeverity } from "./types/review.js";
 import type { TestCaseResult } from "./types/testing.js";
 
 // =============================================================================
@@ -37,6 +38,15 @@ const RESET = "\x1b[0m";
 
 function resolveProjectRoot(): string {
   return process.cwd();
+}
+
+/** Build the PlanInvocation snapshot for storage from the current process. */
+function captureInvocation(projectRoot: string): PlanInvocation {
+  return {
+    command: "deskcheck",
+    args: process.argv.slice(2),
+    cwd: projectRoot,
+  };
 }
 
 function formatFindingsSummary(results: ReviewResults): string {
@@ -244,9 +254,14 @@ async function diffCommand(
   const storageDir = path.join(projectRoot, config.storage_dir);
   const storage = new ReviewStorageService(storageDir);
 
-  // Get changed files via git diff
-  // Insert --name-only right after "diff" so it comes before any -- path separators
-  const gitDiffArgs = ["diff", "--name-only", ...gitArgs];
+  // Resolve the diff ref. The first positional (non-flag) arg becomes the ref;
+  // with no positional, default to HEAD. This is the same ref the reviewer
+  // will use later (`git diff <ref> -- <file>`), so file discovery and the
+  // reviewer's per-file diffs see the same baseline. Bare `deskcheck diff`
+  // therefore reviews working-tree-vs-HEAD = staged + unstaged combined.
+  const ref = gitArgs.find((a) => !a.startsWith("-")) ?? "HEAD";
+  const passthrough = gitArgs.filter((a) => a !== ref);
+  const gitDiffArgs = ["diff", "--name-only", ref, ...passthrough];
   let fileOutput: string;
   try {
     fileOutput = execFileSync("git", gitDiffArgs, {
@@ -276,13 +291,37 @@ async function diffCommand(
     modules = filterModules(modules, patterns);
   }
 
-  // Build a human-readable name from git args
-  const diffTarget = gitArgs.filter((a) => !a.startsWith("--")).join(" ") || "working tree";
-  const planName = `diff: ${diffTarget}`;
-  const sourceTarget = gitArgs[0] ?? "HEAD";
-  const source = { type: "diff" as const, target: sourceTarget };
+  // Build a human-readable plan name and the structured scope.
+  const planName = `diff: ${ref}`;
+  const scope = { type: "changes" as const, ref };
+  const invocation = captureInvocation(projectRoot);
 
-  const plan = buildPlanWithTasks(storage, planName, source, files, modules);
+  const partitioner = new ReviewPartitionerService(config, projectRoot);
+  const plan = await buildPlanWithTasks(
+    storage,
+    partitioner,
+    planName,
+    scope,
+    invocation,
+    files,
+    modules,
+    {
+      onMatchingComplete: (criteriaCount, fileCount) => {
+        console.log(
+          `${DIM}  Matching: ${criteriaCount} criteria matched ${fileCount} file(s)${RESET}`,
+        );
+        if (criteriaCount > 0) {
+          console.log(`${DIM}  Partitioning...${RESET}`);
+        }
+      },
+      onPartitionCompleted: (decision) => {
+        const name = decision.review_id.split("/").pop() ?? decision.review_id;
+        console.log(
+          `${DIM}    ${name}: ${decision.subtasks.length} subtask(s) from ${decision.matched_files.length} file(s)${RESET}`,
+        );
+      },
+    },
+  );
 
   printPlanSummary(plan);
 
@@ -297,9 +336,19 @@ async function diffCommand(
     process.exit(0);
   }
 
-  // Execute
+  // Execute. If the orchestrator throws (per-task errors are handled
+  // internally and don't escape), stamp the failure on the plan first.
   const orchestrator = new ReviewOrchestratorService(config, projectRoot);
-  await executeAndPrint(orchestrator, plan.plan_id);
+  try {
+    await executeAndPrint(orchestrator, plan.plan_id);
+  } catch (err) {
+    storage.setFailure(plan.plan_id, {
+      step: "reviewing",
+      review_id: null,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
 
   // Render results
   const finalPlan = storage.getPlan(plan.plan_id);
@@ -308,30 +357,116 @@ async function diffCommand(
   process.exit(checkFailOn(results, options.failOn));
 }
 
-/** Default command — natural language deskcheck via LLM planner. */
+/**
+ * Parse the `--scope` flag value into a structured Scope.
+ *
+ * Accepted forms:
+ *   all                   → { type: "all" }
+ *   changes               → { type: "changes", ref: "HEAD" }
+ *   changes:<ref>         → { type: "changes", ref: "<ref>" }
+ */
+function parseScopeFlag(value: string): Scope {
+  const trimmed = value.trim();
+  if (trimmed === "all") return { type: "all" };
+  if (trimmed === "changes") return { type: "changes", ref: "HEAD" };
+  if (trimmed.startsWith("changes:")) {
+    const ref = trimmed.slice("changes:".length).trim();
+    if (!ref) throw new Error(`--scope changes: requires a ref (e.g. changes:main)`);
+    return { type: "changes", ref };
+  }
+  throw new Error(`Invalid --scope value: "${value}". Expected "all", "changes", or "changes:<ref>".`);
+}
+
+/** Default command — natural-language deskcheck via the input resolver agent. */
 async function deskchecCommand(
   prompt: string,
-  options: { failOn?: string; criteria?: string },
+  options: { failOn?: string; criteria?: string; scope?: string },
 ): Promise<void> {
   const projectRoot = resolveProjectRoot();
   const config = loadConfig(projectRoot);
   const storageDir = path.join(projectRoot, config.storage_dir);
+  const storage = new ReviewStorageService(storageDir);
 
-  console.log(`${DIM}Planning...${RESET}`);
+  const scopeOverride = options.scope ? parseScopeFlag(options.scope) : undefined;
   const criteriaFilter = options.criteria
     ? options.criteria.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
     : undefined;
-  const planner = new ReviewPlannerService(config, projectRoot);
-  const plan = await planner.plan(prompt, criteriaFilter);
+
+  // Step 1: resolve { scope, files } from natural language.
+  console.log(`${DIM}Resolving...${RESET}`);
+  const resolver = new ReviewInputResolverService(config, projectRoot);
+  const { scope, files } = await resolver.resolve(prompt, scopeOverride);
+
+  // Step 2: discover and filter criteria (programmatic, no LLM).
+  const modulesDir = path.resolve(projectRoot, config.modules_dir);
+  let modules = discoverModules(modulesDir);
+  if (criteriaFilter) {
+    modules = filterModules(modules, criteriaFilter);
+  }
+
+  const invocation = captureInvocation(projectRoot);
+
+  // Empty file list → empty plan with a friendly message, exit clean.
+  if (files.length === 0) {
+    const emptyPlan = storage.createPlan(prompt, scope, invocation);
+    storage.setMatchedFiles(emptyPlan.plan_id, [], []);
+    storage.finalizePlan(emptyPlan.plan_id);
+    console.log("");
+    console.log(`${DIM}  No files matched the request. Nothing to review.${RESET}`);
+    console.log(`${DIM}  Plan ID: ${emptyPlan.plan_id}${RESET}`);
+    process.exit(0);
+  }
+
+  // Step 3: build the plan (glob match → partition → tasks).
+  const partitioner = new ReviewPartitionerService(config, projectRoot);
+  const plan = await buildPlanWithTasks(
+    storage,
+    partitioner,
+    prompt,
+    scope,
+    invocation,
+    files,
+    modules,
+    {
+      onMatchingComplete: (criteriaCount, fileCount) => {
+        console.log(
+          `${DIM}  Matching: ${criteriaCount} criteria matched ${fileCount} file(s)${RESET}`,
+        );
+        if (criteriaCount > 0) {
+          console.log(`${DIM}  Partitioning...${RESET}`);
+        }
+      },
+      onPartitionCompleted: (decision) => {
+        const name = decision.review_id.split("/").pop() ?? decision.review_id;
+        console.log(
+          `${DIM}    ${name}: ${decision.subtasks.length} subtask(s) from ${decision.matched_files.length} file(s)${RESET}`,
+        );
+      },
+    },
+  );
 
   printPlanSummary(plan);
 
-  // Execute
-  const orchestrator = new ReviewOrchestratorService(config, projectRoot);
-  await executeAndPrint(orchestrator, plan.plan_id);
+  if (Object.keys(plan.tasks).length === 0) {
+    console.log(`${DIM}  No criteria matched the resolved files.${RESET}`);
+    process.exit(0);
+  }
 
-  // Render results
-  const storage = new ReviewStorageService(storageDir);
+  // Step 4: execute reviewers. If the orchestrator throws, mark the plan
+  // as failed at the reviewing step before re-raising.
+  const orchestrator = new ReviewOrchestratorService(config, projectRoot);
+  try {
+    await executeAndPrint(orchestrator, plan.plan_id);
+  } catch (err) {
+    storage.setFailure(plan.plan_id, {
+      step: "reviewing",
+      review_id: null,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
+
+  // Step 5: render.
   const finalPlan = storage.getPlan(plan.plan_id);
   const results = storage.getResults(plan.plan_id);
   console.log(renderTerminal(results, finalPlan));
@@ -468,14 +603,15 @@ const program = new Command();
 program
   .name("deskcheck")
   .description("Modular code deskcheck tool powered by Claude")
-  .version("0.1.0");
+  .version("0.4.0");
 
 // Default command: natural language deskcheck
 program
   .argument("[prompt]", "What to check (natural language)")
   .option("--fail-on <severities>", "Exit non-zero if findings match: critical, warning, info (comma-separated)")
   .option("--criteria <names>", "Only run specific criteria (comma-separated, e.g. dto-enforcement,controller-conventions)")
-  .action(async (prompt: string | undefined, options: { failOn?: string; criteria?: string }) => {
+  .option("--scope <value>", "Override resolver scope inference: 'all', 'changes', or 'changes:<ref>'")
+  .action(async (prompt: string | undefined, options: { failOn?: string; criteria?: string; scope?: string }) => {
     if (!prompt) {
       program.help();
       return;
@@ -500,10 +636,9 @@ program
   .option("--criteria <names>", "Only run specific criteria (comma-separated, e.g. dto-enforcement,controller-conventions)")
   .addHelpText("after", `
 Examples:
+  deskcheck diff                      Check working tree vs HEAD (staged + unstaged)
   deskcheck diff develop              Check changes vs develop branch
-  deskcheck diff --staged             Check staged changes
   deskcheck diff HEAD~3               Check last 3 commits
-  deskcheck diff main -- app/         Check changes in app/ vs main
   deskcheck diff develop --dry-run    Show plan without executing
   deskcheck diff develop --fail-on=critical  Exit non-zero on critical findings
   deskcheck diff develop --criteria=dto-enforcement  Only run one criterion

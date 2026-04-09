@@ -1,0 +1,8 @@
+{
+  "modules_dir": "deskcheck/criteria",
+  "storage_dir": ".deskcheck/runs",
+  "agents": {
+    "resolver": { "model": "haiku" },
+    "partitioner": { "model": "haiku" }
+  }
+}

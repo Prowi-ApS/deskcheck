@@ -1,58 +1,97 @@
-/** Severity level assigned to a criterion. */
-export type ModuleSeverity = 'critical' | 'high' | 'medium' | 'low'
+// =============================================================================
+// Mirror of src/types/review.ts and src/types/criteria.ts.
+// Hand-written to match the backend exactly. Update both when either changes.
+// =============================================================================
 
-/** Severity level assigned to an individual issue. */
+export type AgentModel = 'haiku' | 'sonnet' | 'opus'
+
 export type FindingSeverity = 'critical' | 'warning' | 'info'
 
-/** Lifecycle status of a deskcheck plan. */
-export type PlanStatus = 'planning' | 'ready' | 'executing' | 'complete'
+export type PlanStatus =
+  | 'planning'
+  | 'ready'
+  | 'executing'
+  | 'complete'
+  | 'failed'
 
-/** Lifecycle status of an individual task. */
 export type TaskStatus = 'pending' | 'in_progress' | 'complete' | 'error'
 
-/** How the source content is provided. */
-export type ContextType = 'diff' | 'file' | 'symbol'
+export type ResultsStatus = 'partial' | 'complete'
 
-/** What is being reviewed. */
-export interface ReviewSource {
-  type: ContextType
-  target: string
-  file?: string
+export type PipelineStep =
+  | 'matching'
+  | 'partitioning'
+  | 'reviewing'
+  | 'complete'
+  | 'failed'
+
+export interface PlanFailure {
+  step: PipelineStep
+  review_id: string | null
+  message: string
 }
 
-/** A single review task. */
+export type Scope =
+  | { type: 'all' }
+  | { type: 'changes'; ref: string }
+
+export interface PlanInvocation {
+  command: string
+  args: string[]
+  cwd: string
+}
+
 export interface ReviewTask {
   task_id: string
   review_id: string
   review_file: string
   files: string[]
+  scope: Scope
+  focus: string | null
   hint: string | null
-  model: string
+  model: AgentModel
+  tools: string[]
   status: TaskStatus
   created_at: string
   started_at: string | null
   completed_at: string | null
-  context_type: ContextType
-  context: string | null
-  symbol: string | null
+  error: string | null
   prompt: string | null
 }
 
-/** Summary of a criterion's role in a plan. */
 export interface ModuleSummary {
   review_id: string
   description: string
-  severity: ModuleSeverity
+  model: AgentModel
+  partition: string
   task_count: number
   matched_files: string[]
 }
 
-/** The complete deskcheck plan. */
+export interface PartitionedSubtask {
+  files: string[]
+  focus: string | null
+  hint: string | null
+}
+
+export interface PartitionDecision {
+  review_id: string
+  matched_files: string[]
+  reasoning: string
+  subtasks: PartitionedSubtask[]
+  completed_at: string
+  model: AgentModel
+  usage: TaskUsage | null
+}
+
 export interface ReviewPlan {
   plan_id: string
   name: string
-  source: ReviewSource
+  invocation: PlanInvocation
+  scope: Scope
   status: PlanStatus
+  step: PipelineStep
+  failure: PlanFailure | null
   created_at: string
   finalized_at: string | null
   started_at: string | null
@@ -61,35 +100,9 @@ export interface ReviewPlan {
   unmatched_files: string[]
   tasks: Record<string, ReviewTask>
   modules: Record<string, ModuleSummary>
+  partition_decisions: Record<string, PartitionDecision>
 }
 
-/** A code location referenced by an issue. */
-export interface Reference {
-  file: string
-  symbol: string | null
-  line: number | null
-  code: string | null
-  suggestedCode: string | null
-  note: string | null
-}
-
-/** A single issue produced by an executor agent. */
-export interface Issue {
-  issue_id?: string
-  severity: FindingSeverity
-  description: string
-  suggestion: string | null
-  references: Reference[]
-}
-
-/** An issue enriched with source module and task. */
-export interface FileIssue extends Issue {
-  issue_id: string
-  review_id: string
-  task_id: string
-}
-
-/** Token usage and timing data from an executor agent run. */
 export interface TaskUsage {
   input_tokens: number
   output_tokens: number
@@ -102,7 +115,6 @@ export interface TaskUsage {
   model: string
 }
 
-/** Aggregated token usage across all tasks in a run. */
 export interface TotalUsage {
   input_tokens: number
   output_tokens: number
@@ -114,7 +126,31 @@ export interface TotalUsage {
   num_turns: number
 }
 
-/** Results from a single completed task. */
+export interface Reference {
+  file: string
+  symbol: string | null
+  startLine: number
+  endLine: number
+  contextLines: number
+  code: string | null
+  suggestedCode: string | null
+  note: string | null
+}
+
+export interface Issue {
+  issue_id?: string
+  severity: FindingSeverity
+  description: string
+  suggestion: string | null
+  references: Reference[]
+}
+
+export interface FileIssue extends Issue {
+  issue_id: string
+  review_id: string
+  task_id: string
+}
+
 export interface TaskResult {
   task_id: string
   review_id: string
@@ -124,11 +160,9 @@ export interface TaskResult {
   usage: TaskUsage | null
 }
 
-/** Aggregated issues for a single criterion. */
 export interface ModuleIssues {
   review_id: string
   description: string
-  severity: ModuleSeverity
   task_count: number
   completed: number
   counts: {
@@ -140,10 +174,9 @@ export interface ModuleIssues {
   issues: Issue[]
 }
 
-/** The complete deskcheck results. */
 export interface ReviewResults {
   plan_id: string
-  status: 'partial' | 'complete'
+  status: ResultsStatus
   updated_at: string
   completion: {
     total: number
@@ -161,17 +194,21 @@ export interface ReviewResults {
   task_results: Record<string, TaskResult>
   by_file: Record<string, FileIssue[]>
   by_module: Record<string, ModuleIssues>
-  total_usage?: TotalUsage
+  total_usage: TotalUsage
 }
 
-/** A run summary returned by GET /api/runs. */
+// =============================================================================
+// API response shapes (mirror src/server/controllers/ReviewController.ts)
+// =============================================================================
+
 export interface RunSummary {
   planId: string
   name: string
   status: string
   createdAt: string
-  sourceType: string | null
-  sourceTarget: string | null
+  scope: Scope | null
+  step: PipelineStep | null
+  failure: PlanFailure | null
   taskCount: number
   moduleCount: number
   moduleNames: string[]
@@ -179,4 +216,10 @@ export interface RunSummary {
   unmatchedFiles: number
   summary: ReviewResults['summary'] | null
   completion: ReviewResults['completion'] | null
+}
+
+/** Merged response from GET /api/runs/:id. */
+export interface RunDetail {
+  plan: ReviewPlan
+  results: ReviewResults | null
 }

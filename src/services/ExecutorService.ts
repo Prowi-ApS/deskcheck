@@ -12,6 +12,8 @@ import type { TaskUsage } from "../types/review.js";
 export interface ExecutorResult {
   resultText: string;
   usage: TaskUsage | null;
+  /** Full SDK message stream from this run, for transcript persistence. */
+  messages: unknown[];
 }
 
 // =============================================================================
@@ -54,13 +56,33 @@ export function buildMcpServers(config: ReviewConfig): Record<string, SdkMcpServ
 }
 
 /**
+ * Tools always available to a reviewer regardless of config. Reviewers need
+ * these to fetch their own context (Read/Grep/Glob for full files, Bash for
+ * `git diff` in changes-mode scope), so they're hard-wired into the pipeline
+ * rather than being user-configurable.
+ */
+export const BUILTIN_REVIEWER_TOOLS: readonly string[] = [
+  "Read",
+  "Grep",
+  "Glob",
+  "Bash",
+];
+
+/**
  * Build the merged allowed tools list for an executor agent.
  *
- * Combines shared tools from config with any additional tools defined
- * for the executor role.
+ * Always includes the built-in reviewer tools (so reviewers can fetch their
+ * own context), then layers config-shared tools and executor-role tools on
+ * top, deduplicated.
  */
 export function buildAllowedTools(config: ReviewConfig): string[] {
-  const tools = [...config.shared.allowed_tools];
+  const tools: string[] = [...BUILTIN_REVIEWER_TOOLS];
+
+  for (const tool of config.shared.allowed_tools) {
+    if (!tools.includes(tool)) {
+      tools.push(tool);
+    }
+  }
 
   const executorTools = config.agents.executor.additional_tools;
   if (executorTools) {
@@ -100,16 +122,28 @@ export class ExecutorService {
    * @param prompt - The system prompt for the executor agent.
    * @param model - The Claude model tier to use.
    * @param options - Optional overrides for tools, MCP servers, max turns, timeout, and permission mode.
+   *   - `tools` fully overrides the computed allowed-tool set; use this only when callers want
+   *     to bypass the built-in/config/criterion layering.
+   *   - `extraTools` are layered on top of the normal computed set. This is the right knob for
+   *     per-criterion tools coming from frontmatter.
    * @returns The result text and usage data from the agent run.
    */
   async execute(prompt: string, model: AgentModel, options?: {
     maxTurns?: number;
     timeoutMs?: number;
     tools?: string[];
+    extraTools?: string[];
     mcpServers?: Record<string, SdkMcpServerConfig>;
     permissionMode?: PermissionMode;
   }): Promise<ExecutorResult> {
-    const allowedTools = options?.tools ?? buildAllowedTools(this.config);
+    let allowedTools = options?.tools ?? buildAllowedTools(this.config);
+    if (options?.extraTools && options.extraTools.length > 0) {
+      const merged = [...allowedTools];
+      for (const t of options.extraTools) {
+        if (!merged.includes(t)) merged.push(t);
+      }
+      allowedTools = merged;
+    }
     const mcpServers = options?.mcpServers ?? buildMcpServers(this.config);
     const maxTurns = options?.maxTurns ?? 25;
     const timeoutMs = options?.timeoutMs ?? 5 * 60 * 1000;
@@ -120,6 +154,7 @@ export class ExecutorService {
 
     let resultText = "";
     let taskUsage: TaskUsage | null = null;
+    const messages: unknown[] = [];
 
     try {
       for await (const message of query({
@@ -135,6 +170,7 @@ export class ExecutorService {
           ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
         },
       })) {
+        messages.push(message);
         if (message.type === "result") {
           // Capture usage data from result (available on both success and error)
           const msg = message as Record<string, unknown>;
@@ -162,6 +198,6 @@ export class ExecutorService {
       clearTimeout(timeout);
     }
 
-    return { resultText, usage: taskUsage };
+    return { resultText, usage: taskUsage, messages };
   }
 }

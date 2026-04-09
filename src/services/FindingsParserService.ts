@@ -12,35 +12,17 @@ function parseReference(raw: Record<string, unknown>): Reference {
   return {
     file: String(raw.file ?? ""),
     symbol: typeof raw.symbol === "string" ? raw.symbol : null,
-    line: typeof raw.line === "number" ? raw.line : null,
-    code: typeof raw.code === "string" ? raw.code : null,
+    startLine: typeof raw.startLine === "number" ? raw.startLine : 0,
+    endLine: typeof raw.endLine === "number" ? raw.endLine : (typeof raw.startLine === "number" ? raw.startLine : 0),
+    contextLines: typeof raw.contextLines === "number" ? raw.contextLines : 3,
+    code: null, // Always null at parse time — populated by CodeSnippetService
     suggestedCode: typeof raw.suggestedCode === "string" ? raw.suggestedCode : null,
     note: typeof raw.note === "string" ? raw.note : null,
   };
 }
 
-function legacyFindingToIssue(record: Record<string, unknown>): Issue {
-  return {
-    severity: String(record.severity ?? "info") as Issue["severity"],
-    description: String(record.description ?? ""),
-    suggestion: typeof record.suggestion === "string" ? record.suggestion : null,
-    references: [{
-      file: String(record.file ?? ""),
-      symbol: null,
-      line: typeof record.line === "number" ? record.line : null,
-      code: null,
-      suggestedCode: null,
-      note: null,
-    }],
-  };
-}
-
 /**
  * Parse executor output into a validated array of issues.
- *
- * Supports both the new Issue format (with `references` array) and the
- * legacy Finding format (with `file` at top level). Legacy findings are
- * automatically converted to Issues with a single Reference.
  */
 export function parseIssues(output: string): Issue[] {
   // Try to extract JSON array from the output
@@ -90,42 +72,35 @@ export function parseIssues(output: string): Issue[] {
       continue;
     }
 
-    // New Issue format: has `references` array
-    if (Array.isArray(record.references)) {
-      const references: Reference[] = [];
-      for (const ref of record.references) {
-        if (typeof ref === "object" && ref !== null) {
-          references.push(parseReference(ref as Record<string, unknown>));
-        }
+    if (!Array.isArray(record.references) || record.references.length === 0) continue;
+
+    const references: Reference[] = [];
+    for (const ref of record.references) {
+      if (typeof ref === "object" && ref !== null) {
+        references.push(parseReference(ref as Record<string, unknown>));
       }
-      if (references.length === 0) continue;
-      issues.push({
-        severity: severity as FindingSeverity,
-        description: String(record.description ?? ""),
-        suggestion: typeof record.suggestion === "string" ? record.suggestion : null,
-        references,
-      });
-    } else {
-      // Legacy Finding format: has `file` at top level
-      issues.push(legacyFindingToIssue(record));
     }
+    if (references.length === 0) continue;
+    issues.push({
+      severity: severity as FindingSeverity,
+      description: String(record.description ?? ""),
+      suggestion: typeof record.suggestion === "string" ? record.suggestion : null,
+      references,
+    });
   }
 
   return issues;
 }
 
 /**
- * Parse executor output into validated findings (legacy format).
- *
- * @deprecated Use parseIssues instead. This is kept for backwards compatibility
- * with the testing system which still uses the Finding type.
+ * Parse executor output into findings for the testing subsystem.
  */
 export function parseFindings(output: string): Finding[] {
   const issues = parseIssues(output);
   return issues.map((issue) => ({
     severity: issue.severity,
     file: issue.references[0]?.file ?? "",
-    line: issue.references[0]?.line ?? null,
+    line: issue.references[0]?.startLine ?? null,
     description: issue.description,
     suggestion: issue.suggestion,
   }));

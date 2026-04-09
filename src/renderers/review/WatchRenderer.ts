@@ -72,6 +72,7 @@ export function renderWatch(plan: ReviewPlan, results: ReviewResults | null): st
 
   for (const [moduleId, moduleTasks] of moduleGroups) {
     const moduleName = moduleId.split("/").pop() ?? moduleId;
+    const decision = plan.partition_decisions[moduleId];
 
     // Determine module-level status (worst of children)
     let moduleStatus: TaskStatus = "complete";
@@ -95,6 +96,14 @@ export function renderWatch(plan: ReviewPlan, results: ReviewResults | null): st
 
     lines.push(`  ${moduleColor}${moduleIcon}${RESET} ${BOLD}${moduleName}${RESET}${findingsBadge}`);
 
+    // Partition decision (one line under the module header)
+    if (decision) {
+      const reasoning = decision.reasoning.length > 80
+        ? decision.reasoning.slice(0, 77) + "..."
+        : decision.reasoning;
+      lines.push(`    ${DIM}partition: ${decision.subtasks.length} subtask(s) — ${reasoning}${RESET}`);
+    }
+
     // Child tasks (files)
     for (const task of moduleTasks) {
       const fileName = task.files.map(f => f.split("/").pop()).join(", ");
@@ -109,7 +118,8 @@ export function renderWatch(plan: ReviewPlan, results: ReviewResults | null): st
         taskSuffix = ` ${RED}(error)${RESET}`;
       }
 
-      lines.push(`    ${taskColor}${taskIcon}${RESET} ${DIM}${fileName}${RESET}${taskSuffix}`);
+      const focusSuffix = task.focus ? ` ${DIM}[${task.focus}]${RESET}` : "";
+      lines.push(`    ${taskColor}${taskIcon}${RESET} ${DIM}${fileName}${RESET}${focusSuffix}${taskSuffix}`);
     }
     lines.push("");
   }

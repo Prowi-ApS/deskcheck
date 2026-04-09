@@ -122,8 +122,11 @@ export function renderTerminal(
 
 /** Format a reference's location string: prefer symbol, fall back to file:line. */
 function formatRefLocation(ref: Reference): string {
+  const lineRange = ref.startLine > 0
+    ? ref.startLine === ref.endLine ? `:${ref.startLine}` : `:${ref.startLine}-${ref.endLine}`
+    : "";
   if (ref.symbol) {
-    return ref.line ? `${ref.file} ${ref.symbol}:${ref.line}` : `${ref.file} ${ref.symbol}`;
+    return `${ref.file} ${ref.symbol}${lineRange}`;
   }
-  return ref.line ? `${ref.file}:${ref.line}` : ref.file;
+  return `${ref.file}${lineRange}`;
 }

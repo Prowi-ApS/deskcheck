@@ -1,10 +1,9 @@
 ---
 description: Checks for proper error handling patterns
-severity: high
 globs:
   - "**/*.ts"
   - "**/*.js"
-mode: One task per file
+partition: one task per file
 model: haiku
 ---
 

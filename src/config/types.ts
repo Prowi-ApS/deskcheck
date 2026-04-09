@@ -43,7 +43,8 @@ export interface ReviewConfig {
   };
   /** Per-role agent configuration. */
   agents: {
-    planner: AgentRoleConfig;
+    resolver: AgentRoleConfig;
+    partitioner: AgentRoleConfig;
     executor: AgentRoleConfig;
     evaluator: AgentRoleConfig;
     judge: AgentRoleConfig;

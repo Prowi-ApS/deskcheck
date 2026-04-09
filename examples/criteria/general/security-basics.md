@@ -1,12 +1,11 @@
 ---
 description: Checks for common security vulnerabilities
-severity: critical
 globs:
   - "**/*.ts"
   - "**/*.js"
   - "**/*.py"
   - "**/*.php"
-mode: One task per file
+partition: one task per file
 model: sonnet
 ---
 

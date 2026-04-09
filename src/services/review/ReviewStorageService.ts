@@ -1,15 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import type {
-  ContextType,
   Issue,
   FileIssue,
   ModuleIssues,
   ModuleSummary,
+  PartitionDecision,
+  PipelineStep,
+  PlanFailure,
+  PlanInvocation,
   ReviewPlan,
   ReviewResults,
-  ReviewSource,
   ReviewTask,
+  Scope,
   TaskResult,
   TaskUsage,
   TotalUsage,
@@ -155,7 +158,7 @@ export class ReviewStorageService {
    * Creates the timestamped directory and writes an initial plan.json with
    * status "planning" and empty collections.
    */
-  createPlan(name: string, source: ReviewSource): ReviewPlan {
+  createPlan(name: string, scope: Scope, invocation: PlanInvocation): ReviewPlan {
     const now = new Date();
     const planId = formatTimestamp(now);
     const planDir = path.join(this.storageDir, planId);
@@ -165,8 +168,11 @@ export class ReviewStorageService {
     const plan: ReviewPlan = {
       plan_id: planId,
       name,
-      source,
+      invocation,
+      scope,
       status: "planning",
+      step: "matching",
+      failure: null,
       created_at: now.toISOString(),
       finalized_at: null,
       started_at: null,
@@ -175,6 +181,7 @@ export class ReviewStorageService {
       unmatched_files: [],
       tasks: {},
       modules: {},
+      partition_decisions: {},
     };
 
     this.writePlan(planId, plan);
@@ -299,11 +306,12 @@ export class ReviewStorageService {
       | "created_at"
       | "started_at"
       | "completed_at"
-      | "context"
-      | "context_type"
-      | "symbol"
+      | "scope"
+      | "focus"
+      | "tools"
+      | "error"
       | "prompt"
-    >,
+    > & { focus?: string | null; tools?: string[]; prompt?: string | null },
   ): ReviewTask {
     return this.withLock(planId, () => {
       const plan = this.getPlan(planId);
@@ -320,16 +328,17 @@ export class ReviewStorageService {
         review_id: task.review_id,
         review_file: task.review_file,
         files: task.files,
+        scope: plan.scope,
+        focus: task.focus ?? null,
         hint: task.hint,
         model: task.model,
+        tools: task.tools ?? [],
         status: "pending",
         created_at: new Date().toISOString(),
         started_at: null,
         completed_at: null,
-        context_type: plan.source.type,
-        context: null,
-        symbol: null,
-        prompt: null,
+        error: null,
+        prompt: task.prompt ?? null,
       };
 
       plan.tasks[taskId] = newTask;
@@ -338,21 +347,107 @@ export class ReviewStorageService {
     });
   }
 
+  /** Record a partitioner decision for one criterion. */
+  setPartitionDecision(planId: string, decision: PartitionDecision): void {
+    this.withLock(planId, () => {
+      const plan = this.getPlan(planId);
+      plan.partition_decisions[decision.review_id] = decision;
+      this.writePlan(planId, plan);
+    });
+  }
+
+  /**
+   * Update the pipeline step the plan is currently in. When transitioning
+   * to a terminal step (`complete`/`failed`), also promotes `status` to the
+   * matching terminal value and stamps `completed_at` if not already set —
+   * this keeps the invariant `step terminal ⟺ status terminal`.
+   */
+  setStep(planId: string, step: PipelineStep): void {
+    this.withLock(planId, () => {
+      const plan = this.getPlan(planId);
+      plan.step = step;
+      if (step === "complete" && plan.status !== "complete") {
+        plan.status = "complete";
+        plan.completed_at = plan.completed_at ?? new Date().toISOString();
+      } else if (step === "failed" && plan.status !== "failed") {
+        plan.status = "failed";
+        plan.completed_at = plan.completed_at ?? new Date().toISOString();
+      }
+      this.writePlan(planId, plan);
+    });
+  }
+
+  /**
+   * Mark the plan as failed at a specific step. Sets `status = "failed"`,
+   * `step = "failed"`, and stamps the failure details. Idempotent — if the
+   * plan is already failed, the new failure overwrites the old.
+   */
+  setFailure(planId: string, failure: PlanFailure): void {
+    this.withLock(planId, () => {
+      const plan = this.getPlan(planId);
+      plan.status = "failed";
+      plan.step = "failed";
+      plan.failure = failure;
+      plan.completed_at = plan.completed_at ?? new Date().toISOString();
+      this.writePlan(planId, plan);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Agent transcripts
+  //
+  // Each agent run (executor for a task, partitioner for a criterion) writes
+  // its full SDK message stream to a side-file in the plan directory. Kept
+  // out of plan.json/results.json so those stay small enough to load
+  // routinely. The CLI/server only loads transcripts on demand.
+  // ---------------------------------------------------------------------------
+
+  /** Persist the full SDK message stream from one reviewer's run. */
+  writeTaskLog(planId: string, taskId: string, messages: unknown[]): void {
+    const target = path.join(this.planDir(planId), `task_${taskId}.log.json`);
+    const tmp = target + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(messages, null, 2) + "\n");
+    fs.renameSync(tmp, target);
+  }
+
+  /** Read a previously persisted reviewer transcript. */
+  getTaskLog(planId: string, taskId: string): unknown[] {
+    const target = path.join(this.planDir(planId), `task_${taskId}.log.json`);
+    if (!fs.existsSync(target)) return [];
+    return JSON.parse(fs.readFileSync(target, "utf-8")) as unknown[];
+  }
+
+  /** Persist the full SDK message stream from one partitioner's run. */
+  writePartitionerLog(planId: string, reviewId: string, messages: unknown[]): void {
+    const target = path.join(
+      this.planDir(planId),
+      `partitioner_${flattenReviewId(reviewId)}.log.json`,
+    );
+    const tmp = target + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(messages, null, 2) + "\n");
+    fs.renameSync(tmp, target);
+  }
+
+  /** Read a previously persisted partitioner transcript. */
+  getPartitionerLog(planId: string, reviewId: string): unknown[] {
+    const target = path.join(
+      this.planDir(planId),
+      `partitioner_${flattenReviewId(reviewId)}.log.json`,
+    );
+    if (!fs.existsSync(target)) return [];
+    return JSON.parse(fs.readFileSync(target, "utf-8")) as unknown[];
+  }
+
   /**
    * Claim a pending task for execution.
    *
-   * Sets the task status to "in_progress", fills in the context fields
-   * (context type, content, symbol, prompt), and records the start time.
+   * Sets the task status to "in_progress", records the start time, and
+   * optionally stores the criterion prompt for later inspection.
    */
   claimTask(
     planId: string,
     taskId: string,
-    context: {
-      contextType: ContextType;
-      content: string;
-      symbol?: string;
-      prompt: string;
-    },
+    options?: { prompt?: string },
   ): ReviewTask {
     return this.withLock(planId, () => {
       const plan = this.getPlan(planId);
@@ -366,10 +461,9 @@ export class ReviewStorageService {
 
       task.status = "in_progress";
       task.started_at = new Date().toISOString();
-      task.context_type = context.contextType;
-      task.context = context.content;
-      task.symbol = context.symbol ?? null;
-      task.prompt = context.prompt;
+      if (options?.prompt !== undefined) {
+        task.prompt = options.prompt;
+      }
 
       // Set plan to executing if it was ready
       if (plan.status === "ready") {
@@ -440,6 +534,7 @@ export class ReviewStorageService {
 
       if (allDone) {
         plan.status = "complete";
+        plan.step = "complete";
         plan.completed_at = now;
       }
 
@@ -484,6 +579,7 @@ export class ReviewStorageService {
 
       task.status = "error";
       task.completed_at = now;
+      task.error = errorMessage;
 
       // Check if all tasks have reached a terminal status
       const allDone = Object.values(plan.tasks).every(
@@ -492,6 +588,7 @@ export class ReviewStorageService {
 
       if (allDone) {
         plan.status = "complete";
+        plan.step = "complete";
         plan.completed_at = now;
       }
 
@@ -718,7 +815,6 @@ export class ReviewStorageService {
         byModule[reviewId] = {
           review_id: reviewId,
           description: moduleSummary?.description ?? "",
-          severity: moduleSummary?.severity ?? "medium",
           task_count: moduleSummary?.task_count ?? 0,
           completed: 0,
           counts: { critical: 0, warning: 0, info: 0, total: 0 },

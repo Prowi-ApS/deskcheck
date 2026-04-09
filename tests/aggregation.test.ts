@@ -24,15 +24,19 @@ afterEach(() => {
 });
 
 function createTestPlan(): string {
-  const plan = storage.createPlan("test-plan", { type: "file", target: "main" });
+  const plan = storage.createPlan("test-plan", { type: "all" }, {
+    command: "deskcheck",
+    args: ["test"],
+    cwd: "/tmp",
+  });
 
   // Set up modules
   storage.setModules(plan.plan_id, {
     "arch/dto": {
       review_id: "arch/dto",
       description: "DTO enforcement",
-      severity: "high",
       model: "sonnet",
+      partition: "one task per file",
       task_count: 0,
       matched_files: ["src/service.ts", "src/handler.ts"],
     },
@@ -45,6 +49,7 @@ function createTestPlan(): string {
     files: ["src/service.ts"],
     hint: null,
     model: "sonnet",
+    prompt: "review this",
   });
 
   storage.addTask(plan.plan_id, {
@@ -53,6 +58,7 @@ function createTestPlan(): string {
     files: ["src/handler.ts"],
     hint: null,
     model: "sonnet",
+    prompt: "review this",
   });
 
   // Finalize
@@ -61,11 +67,7 @@ function createTestPlan(): string {
   // Claim tasks
   const finalized = storage.getPlan(plan.plan_id);
   for (const task of Object.values(finalized.tasks)) {
-    storage.claimTask(plan.plan_id, task.task_id, {
-      contextType: "file",
-      content: "file content here",
-      prompt: "review this",
-    });
+    storage.claimTask(plan.plan_id, task.task_id);
   }
 
   return plan.plan_id;

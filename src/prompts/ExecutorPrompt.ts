@@ -1,11 +1,13 @@
-import type { ReviewTask } from "../types/review.js";
+import type { ReviewTask, Scope } from "../types/review.js";
 
 /**
  * Build the system prompt for an executor agent.
  *
  * The executor receives a single deskcheck task containing the detective prompt
- * (from the criterion), the files to check, and the extracted context
- * (diff, file content, or symbol). It outputs a JSON array of findings to stdout.
+ * (from the criterion), the files to check, and the resolved scope. It uses its
+ * built-in tools (Read, Grep, Glob, Bash) to fetch the actual code itself —
+ * either by running `git diff` for changes-mode scope or by reading full file
+ * contents for all-mode scope. It outputs a JSON array of findings to stdout.
  *
  * CRITICAL DESIGN PRINCIPLE: The executor ONLY reports findings that the criterion
  * explicitly asks it to check. It does NOT do a general code review. The criterion
@@ -33,19 +35,18 @@ You MUST only report findings that are explicitly covered by the "What to Check"
   const fileList = task.files.map((f) => `- ${f}`).join("\n");
   sections.push(`## Files Under Review\n${fileList}`);
 
-  // Scope hint
-  if (task.hint) {
-    sections.push(`## Scope Hint\n${task.hint}`);
+  // Focus — sub-file narrowing set by the partitioner.
+  if (task.focus) {
+    sections.push(`## Focus\nReview only this part of the assigned files: **${task.focus}**. Ignore code outside this focus, even if you would otherwise flag it.`);
   }
 
-  // Review context
-  const contextHeader = `## Review Context\n**Context Type:** ${task.context_type}`;
-  const symbolLine = task.symbol ? `\n**Symbol:** ${task.symbol}` : "";
-  const contextBody = task.context ?? "No context provided.";
-  sections.push(`${contextHeader}${symbolLine}\n\n${contextBody}`);
+  // Partitioner hint — short rationale for why these files are grouped.
+  if (task.hint) {
+    sections.push(`## Grouping Hint\n${task.hint}`);
+  }
 
-  // Instructions based on context type
-  sections.push(buildContextTypeGuidance(task.context_type));
+  // Scope + how to gather context
+  sections.push(buildScopeSection(task.scope));
 
   // Output format instructions
   sections.push(buildOutputInstructions());
@@ -53,27 +54,34 @@ You MUST only report findings that are explicitly covered by the "What to Check"
   return sections.join("\n\n");
 }
 
-/** Guidance on how to review based on the context type. */
-function buildContextTypeGuidance(contextType: string): string {
-  const header = "## Context Type";
+/** Tells the reviewer what scope it's working under and how to fetch its own context. */
+function buildScopeSection(scope: Scope): string {
+  if (scope.type === "changes") {
+    return `## Scope: changes against \`${scope.ref}\`
 
-  switch (contextType) {
-    case "diff":
-      return `${header}\nYou are reviewing a **diff**. The context shows what changed. Apply the criterion's checks to the changed code.`;
-    case "file":
-      return `${header}\nYou are reviewing **full file contents**. Apply the criterion's checks to the entire file.`;
-    case "symbol":
-      return `${header}\nYou are reviewing a **specific symbol** (function, class, or method). Apply the criterion's checks to the named symbol.`;
-    default:
-      return `${header}\nApply the criterion's checks to the provided context.`;
+You are reviewing **only what changed** against \`${scope.ref}\`. For each file in "Files Under Review", run:
+
+\`\`\`
+git diff ${scope.ref} -- <file>
+\`\`\`
+
+Apply the criterion's checks to the changed lines. Unchanged code is out of scope — do not report issues that exist in the file but were not introduced or modified by the diff.
+
+You may read additional files (with Read/Grep/Glob) to understand context — for example, reading a related interface to validate a change. But only produce issues whose primary location is one of the files listed above.`;
   }
+
+  return `## Scope: full files
+
+You are reviewing the **full contents** of each assigned file. Use the Read tool to load each file in "Files Under Review" and apply the criterion's checks to the entire file.
+
+You may read additional files (with Read/Grep/Glob) for context — for example, reading a related interface or test. But only produce issues whose primary location is one of the files listed above.`;
 }
 
 /** Instructions for the executor's output format. */
 function buildOutputInstructions(): string {
   return `## Your Task
 1. Read the review instructions carefully
-2. Analyze the code provided in the context
+2. Use your tools to gather the code you need to inspect (per the Scope section above)
 3. Report issues as a JSON array to stdout
 
 Output ONLY a JSON array of issues. Each issue has references pointing to one or more code locations:
@@ -86,8 +94,9 @@ Output ONLY a JSON array of issues. Each issue has references pointing to one or
     {
       "file": "path/to/file",
       "symbol": "ClassName::method or null",
-      "line": 42,
-      "code": "the current code snippet, or null",
+      "startLine": 42,
+      "endLine": 55,
+      "contextLines": 3,
       "suggestedCode": "what it should look like, or null",
       "note": "why this location is relevant, or null"
     }
@@ -103,19 +112,17 @@ Output ONLY a JSON array of issues. Each issue has references pointing to one or
 - \`references\`: array of code locations where the issue manifests (at least one required)
   - \`file\`: the file path
   - \`symbol\`: semantic anchor like "ClassName::method" or "ClassName::$property" — stable across refactors. Use null if not applicable.
-  - \`line\`: line number for navigation, or null
-  - \`code\`: include the relevant code snippet so the reviewer can understand the issue without opening the file. Keep it focused (the relevant function/block, not the entire file).
-  - \`suggestedCode\`: when suggesting a fix, show what the code should look like. Use null when the fix is better described in the top-level \`suggestion\`.
+  - \`startLine\`: first line of the flagged code range (inclusive). REQUIRED.
+  - \`endLine\`: last line of the flagged code range (inclusive). REQUIRED. Use the same value as \`startLine\` for single-line issues.
+  - \`contextLines\`: how many lines of surrounding context to include above and below the flagged range in the code snippet. Defaults to 3. Use more (e.g. 5-10) when the surrounding function/block is needed to understand the issue, less (0-1) when the flagged line is self-explanatory.
+  - Do NOT include a \`code\` field — the actual code snippet will be resolved automatically from the line range.
+  - \`suggestedCode\`: when suggesting a concrete replacement, show what the code should look like. Use null when the fix is better described in the top-level \`suggestion\`.
   - \`note\`: brief context for why this reference matters (e.g. "First occurrence", "Duplicated", "Missing return type"). Use null when obvious.
 
 ### When to use multiple references
 
 - **Cross-file issues**: duplicated patterns across files, missing consistency between related files
 - **Single-file issues**: just use one reference
-
-### Code snippets
-
-Include relevant code snippets in \`code\` so the reviewer can understand the issue without opening their editor. When suggesting a fix, include \`suggestedCode\` to show the before/after clearly.
 
 If no issues found, output an empty array: []
 

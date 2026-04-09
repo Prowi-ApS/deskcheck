@@ -1,4 +1,4 @@
-import type { AgentModel, ModuleSeverity } from "./criteria.js";
+import type { AgentModel } from "./criteria.js";
 
 // =============================================================================
 // Common Union Types
@@ -7,11 +7,8 @@ import type { AgentModel, ModuleSeverity } from "./criteria.js";
 /** Severity level assigned to an individual finding. */
 export type FindingSeverity = "critical" | "warning" | "info";
 
-/** How the source content is provided to executors. */
-export type ContextType = "diff" | "file" | "symbol";
-
 /** Lifecycle status of a deskcheck plan. */
-export type PlanStatus = "planning" | "ready" | "executing" | "complete";
+export type PlanStatus = "planning" | "ready" | "executing" | "complete" | "failed";
 
 /** Lifecycle status of an individual deskcheck task. */
 export type TaskStatus = "pending" | "in_progress" | "complete" | "error";
@@ -19,19 +16,50 @@ export type TaskStatus = "pending" | "in_progress" | "complete" | "error";
 /** Whether results cover all tasks or only a subset. */
 export type ResultsStatus = "partial" | "complete";
 
+/**
+ * Pipeline step the plan is currently in. Distinct from `PlanStatus` because
+ * `planning` covers both matching and partitioning, which the UI needs to
+ * distinguish. Updated by the plan-builder as it progresses.
+ */
+export type PipelineStep =
+  | "matching"
+  | "partitioning"
+  | "reviewing"
+  | "complete"
+  | "failed";
+
+/**
+ * If a run failed, what failed and where. Persisted on the plan so the UI
+ * can render which step turned red and which criterion (if any) was the
+ * culprit.
+ */
+export interface PlanFailure {
+  /** Which step the run was in when it failed. */
+  step: PipelineStep;
+  /** Criterion id, if the failure was scoped to one (e.g. partitioner crash). Null for run-wide failures. */
+  review_id: string | null;
+  /** Human-readable error message. */
+  message: string;
+}
+
+// =============================================================================
+// Scope
+// =============================================================================
+
+/**
+ * What the reviewer should look at, resolved at invocation time.
+ *
+ * - `all` — review the assigned files in their entirety.
+ * - `changes` — review only what changed against the given git ref. The reviewer
+ *   produces its own context by running `git diff <ref> -- <file>`.
+ */
+export type Scope =
+  | { type: "all" }
+  | { type: "changes"; ref: string };
+
 // =============================================================================
 // Storage Types — plan.json
 // =============================================================================
-
-/** What is being reviewed — a diff, file, or symbol. */
-export interface ReviewSource {
-  /** The kind of content being reviewed. */
-  type: ContextType;
-  /** Target identifier: branch name (diff), file path (file), or symbol name (symbol). */
-  target: string;
-  /** Only for symbol mode — the file containing the symbol. */
-  file?: string;
-}
 
 /** A single review task assigned to an executor agent. */
 export interface ReviewTask {
@@ -43,10 +71,24 @@ export interface ReviewTask {
   review_file: string;
   /** Files assigned to this task. */
   files: string[];
-  /** Optional planner hint describing scope or focus area. */
+  /** Scope for this task — copied from the plan. */
+  scope: Scope;
+  /**
+   * Optional sub-file narrowing set by the partitioner — e.g. a method name
+   * when one criterion is partitioned "one method per task". The reviewer
+   * still gets the full files list, but only reports issues within `focus`.
+   */
+  focus: string | null;
+  /** Optional partitioner hint explaining why these files were grouped. */
   hint: string | null;
   /** Claude model tier for the executor agent. */
   model: AgentModel;
+  /**
+   * Extra tool names this reviewer should have access to, copied from the
+   * criterion's frontmatter at addTask time. Layered on top of the built-in
+   * reviewer tools and config-level tools by ExecutorService.
+   */
+  tools: string[];
   /** Current lifecycle status. */
   status: TaskStatus;
   /** ISO 8601 timestamp when this task was created. */
@@ -55,13 +97,12 @@ export interface ReviewTask {
   started_at: string | null;
   /** ISO 8601 timestamp when execution completed. */
   completed_at: string | null;
+  /**
+   * Error message if `status === "error"`. Null otherwise. Persisted so the
+   * UI can show what went wrong on a per-subtask basis after the run.
+   */
+  error: string | null;
 
-  /** How context was provided to the executor (diff, file content, or symbol). */
-  context_type: ContextType;
-  /** The actual context content (pruneable after completion). */
-  context: string | null;
-  /** Only for symbol mode — the symbol being reviewed. */
-  symbol: string | null;
   /** The detective prompt from the criterion (pruneable after completion). */
   prompt: string | null;
 }
@@ -72,14 +113,27 @@ export interface ModuleSummary {
   review_id: string;
   /** Human-readable description from frontmatter. */
   description: string;
-  /** Criterion severity level. */
-  severity: ModuleSeverity;
   /** Claude model tier from frontmatter. */
   model: AgentModel;
+  /** Natural-language partition instruction from frontmatter, copied here so the UI can display it without re-reading the criterion file. */
+  partition: string;
   /** Number of tasks created for this criterion. */
   task_count: number;
   /** Files that matched this module's globs. */
   matched_files: string[];
+}
+
+/**
+ * How the user invoked deskcheck for this run. Persisted on the plan so
+ * runs are reproducible from inspection alone.
+ */
+export interface PlanInvocation {
+  /** The argv[0]-equivalent program name (always "deskcheck"). */
+  command: string;
+  /** The remaining argv passed to deskcheck (subcommand + flags + positionals). */
+  args: string[];
+  /** Working directory at invocation time. */
+  cwd: string;
 }
 
 /** The complete deskcheck plan written to plan.json. */
@@ -88,10 +142,19 @@ export interface ReviewPlan {
   plan_id: string;
   /** Human-readable name, e.g. "feature/order-rework vs develop". */
   name: string;
-  /** What is being reviewed. */
-  source: ReviewSource;
+  /** How the user invoked deskcheck for this run. */
+  invocation: PlanInvocation;
+  /** What the reviewers should look at. */
+  scope: Scope;
   /** Current lifecycle status. */
   status: PlanStatus;
+  /**
+   * Pipeline step the plan-builder/orchestrator are currently in. More
+   * granular than `status` because `planning` covers matching+partitioning.
+   */
+  step: PipelineStep;
+  /** If the run failed, what went wrong. Null on success and in-progress runs. */
+  failure: PlanFailure | null;
   /** ISO 8601 timestamp when the plan was created. */
   created_at: string;
   /** ISO 8601 timestamp when planning was finalized. */
@@ -110,6 +173,43 @@ export interface ReviewPlan {
   tasks: Record<string, ReviewTask>;
   /** Per-module summaries keyed by review_id. */
   modules: Record<string, ModuleSummary>;
+  /** Partitioner output per criterion, keyed by review_id. */
+  partition_decisions: Record<string, PartitionDecision>;
+}
+
+/**
+ * Output of one partitioner agent run for one criterion.
+ *
+ * Captures the partitioner's overall reasoning and a snapshot of the
+ * subtasks it produced, so a stored plan is fully inspectable. The actual
+ * tasks live in `ReviewPlan.tasks`; this is the audit trail of how they
+ * came to be.
+ */
+export interface PartitionDecision {
+  /** The criterion this decision applies to. */
+  review_id: string;
+  /** Files the partitioner was given (the glob match output). */
+  matched_files: string[];
+  /** The partitioner agent's overall reasoning for the grouping. */
+  reasoning: string;
+  /** The subtasks the partitioner emitted (also reflected in plan.tasks). */
+  subtasks: PartitionedSubtask[];
+  /** ISO 8601 timestamp when this partition completed. */
+  completed_at: string;
+  /** Claude model tier used for the partitioner agent. */
+  model: AgentModel;
+  /** Token usage and timing for the partitioner agent run. */
+  usage: TaskUsage | null;
+}
+
+/** A subtask emitted by the partitioner for a single criterion. */
+export interface PartitionedSubtask {
+  /** Files assigned to this subtask. May overlap with other subtasks if `focus` differs. */
+  files: string[];
+  /** Sub-file narrowing — e.g. a method name when partitioning "one method per task". */
+  focus: string | null;
+  /** Short explanation of why these files were grouped together. */
+  hint: string | null;
 }
 
 // =============================================================================
@@ -151,9 +251,16 @@ export interface Reference {
   file: string;
   /** Semantic symbol anchor, e.g. "ClassName::method". Stable across refactors. */
   symbol: string | null;
-  /** Line number for navigation, not the primary identifier. */
-  line: number | null;
-  /** The current code at this location (for self-contained review). */
+  /** Start line of the flagged range (inclusive). */
+  startLine: number;
+  /** End line of the flagged range (inclusive). */
+  endLine: number;
+  /** How many lines of surrounding context to include in the code snippet. */
+  contextLines: number;
+  /**
+   * The actual code at this location, extracted from disk by post-processing.
+   * Null at parse time — populated by CodeSnippetService before writing results.
+   */
   code: string | null;
   /** Suggested replacement code (optional fix). */
   suggestedCode: string | null;
@@ -219,8 +326,6 @@ export interface ModuleIssues {
   review_id: string;
   /** Human-readable description. */
   description: string;
-  /** Criterion severity level. */
-  severity: ModuleSeverity;
   /** Total number of tasks for this criterion. */
   task_count: number;
   /** Number of completed tasks. */

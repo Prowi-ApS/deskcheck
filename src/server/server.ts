@@ -4,7 +4,14 @@ import path from "node:path";
 import { URL } from "node:url";
 import { ReviewStorageService } from "../services/review/ReviewStorageService.js";
 import { handleCors } from "./middleware/cors.js";
-import { handleGetRuns, handleGetPlan, handleGetResults } from "./controllers/ReviewController.js";
+import {
+  handleGetRuns,
+  handleGetRun,
+  handleGetPlan,
+  handleGetResults,
+  handleGetTaskLog,
+  handleGetPartitionerLog,
+} from "./controllers/ReviewController.js";
 import { handleSSE } from "./sse/FileWatcherSSE.js";
 import type { ReviewConfig } from "../config/types.js";
 
@@ -95,6 +102,12 @@ export function startServer(config: ReviewConfig, projectRoot: string, port: num
       return;
     }
 
+    // GET /api/runs/:id -> merged plan + results (used by the new UI)
+    if (segments.length === 3 && segments[1] === "runs") {
+      handleGetRun(storage, res, decodeURIComponent(segments[2]));
+      return;
+    }
+
     // GET /api/runs/:id/plan
     if (segments.length === 4 && segments[1] === "runs" && segments[3] === "plan") {
       handleGetPlan(storage, res, decodeURIComponent(segments[2]));
@@ -104,6 +117,38 @@ export function startServer(config: ReviewConfig, projectRoot: string, port: num
     // GET /api/runs/:id/results
     if (segments.length === 4 && segments[1] === "runs" && segments[3] === "results") {
       handleGetResults(storage, res, decodeURIComponent(segments[2]));
+      return;
+    }
+
+    // GET /api/runs/:id/tasks/:taskId/log -> reviewer's full SDK transcript
+    if (
+      segments.length === 6 &&
+      segments[1] === "runs" &&
+      segments[3] === "tasks" &&
+      segments[5] === "log"
+    ) {
+      handleGetTaskLog(
+        storage,
+        res,
+        decodeURIComponent(segments[2]!),
+        decodeURIComponent(segments[4]!),
+      );
+      return;
+    }
+
+    // GET /api/runs/:id/partitioners/:reviewId/log -> partitioner's full SDK transcript
+    if (
+      segments.length === 6 &&
+      segments[1] === "runs" &&
+      segments[3] === "partitioners" &&
+      segments[5] === "log"
+    ) {
+      handleGetPartitionerLog(
+        storage,
+        res,
+        decodeURIComponent(segments[2]!),
+        decodeURIComponent(segments[4]!),
+      );
       return;
     }
 

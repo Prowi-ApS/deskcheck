@@ -1,6 +1,11 @@
 import type http from "node:http";
 import type { ReviewStorageService } from "../../services/review/ReviewStorageService.js";
-import type { ReviewResults } from "../../types/review.js";
+import type {
+  PipelineStep,
+  PlanFailure,
+  ReviewResults,
+  Scope,
+} from "../../types/review.js";
 
 // =============================================================================
 // Types
@@ -12,8 +17,9 @@ export interface RunSummary {
   name: string;
   status: string;
   createdAt: string;
-  sourceType: string | null;
-  sourceTarget: string | null;
+  scope: Scope | null;
+  step: PipelineStep | null;
+  failure: PlanFailure | null;
   taskCount: number;
   moduleCount: number;
   moduleNames: string[];
@@ -66,8 +72,9 @@ export function handleGetRuns(storage: ReviewStorageService, res: http.ServerRes
     let moduleNames: string[] = [];
     let matchedFiles = 0;
     let unmatchedFiles = 0;
-    let sourceType: string | null = null;
-    let sourceTarget: string | null = null;
+    let scope: Scope | null = null;
+    let step: PipelineStep | null = null;
+    let failure: PlanFailure | null = null;
 
     try {
       const plan = storage.getPlan(planSummary.planId);
@@ -76,8 +83,9 @@ export function handleGetRuns(storage: ReviewStorageService, res: http.ServerRes
       moduleNames = Object.keys(plan.modules).map((id) => id.split("/").pop() ?? id);
       matchedFiles = plan.matched_files?.length ?? 0;
       unmatchedFiles = plan.unmatched_files?.length ?? 0;
-      sourceType = plan.source?.type ?? null;
-      sourceTarget = plan.source?.target ?? null;
+      scope = plan.scope ?? null;
+      step = plan.step ?? null;
+      failure = plan.failure ?? null;
     } catch {
       // Plan read error
     }
@@ -87,8 +95,9 @@ export function handleGetRuns(storage: ReviewStorageService, res: http.ServerRes
       name: planSummary.name,
       status: planSummary.status,
       createdAt: planSummary.createdAt,
-      sourceType,
-      sourceTarget,
+      scope,
+      step,
+      failure,
       taskCount,
       moduleCount,
       moduleNames,
@@ -116,5 +125,57 @@ export function handleGetResults(storage: ReviewStorageService, res: http.Server
     sendJson(res, results);
   } catch {
     sendError(res, 404, `Results not found for plan: ${planId}`);
+  }
+}
+
+/**
+ * GET /api/runs/:id — return plan and results merged into a single
+ * response. The UI uses this for V1/V2/V3 to halve fetch counts and avoid
+ * partial-state races between two separate requests.
+ */
+export function handleGetRun(storage: ReviewStorageService, res: http.ServerResponse, planId: string): void {
+  let plan;
+  try {
+    plan = storage.getPlan(planId);
+  } catch {
+    sendError(res, 404, `Plan not found: ${planId}`);
+    return;
+  }
+
+  // Results may not exist yet (e.g. plan was just created and no tasks
+  // have completed). Returning null lets the UI render the in-progress state.
+  let results: ReviewResults | null = null;
+  try {
+    results = storage.getResults(planId);
+  } catch {
+    results = null;
+  }
+
+  sendJson(res, { plan, results });
+}
+
+export function handleGetTaskLog(
+  storage: ReviewStorageService,
+  res: http.ServerResponse,
+  planId: string,
+  taskId: string,
+): void {
+  try {
+    sendJson(res, storage.getTaskLog(planId, taskId));
+  } catch {
+    sendError(res, 404, `Task log not found: ${planId}/${taskId}`);
+  }
+}
+
+export function handleGetPartitionerLog(
+  storage: ReviewStorageService,
+  res: http.ServerResponse,
+  planId: string,
+  reviewId: string,
+): void {
+  try {
+    sendJson(res, storage.getPartitionerLog(planId, reviewId));
+  } catch {
+    sendError(res, 404, `Partitioner log not found: ${planId}/${reviewId}`);
   }
 }

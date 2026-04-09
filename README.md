@@ -2,8 +2,6 @@
 
 Modular code review powered by Claude. Define what to check as markdown, deskcheck runs each check in a fresh AI agent, and aggregates the findings.
 
-![Run overview](docs/screenshots/run-overview.png)
-
 ## Why deskcheck?
 
 Traditional code review tools leave a gap:
@@ -12,11 +10,11 @@ Traditional code review tools leave a gap:
 - **Linters** verify syntax — they can't tell you "this endpoint is missing input validation"
 - **A single LLM** reviewing a whole branch suffers **context rot** — as its context fills up, it starts missing the patterns it's supposed to catch
 
-Deskcheck solves this by breaking every review into the smallest possible unit: **one file + one criterion + one fresh agent**. Each agent gets a clean context with only the code it needs and the specific rules to check. Results are aggregated mechanically.
+Deskcheck solves this by breaking every review into the smallest possible unit. A **partitioner agent** reads your criterion and decides how to split the matched files into focused subtasks. Each subtask runs in a **fresh reviewer agent** with clean context — only the code it needs and the specific rules to check. Results are aggregated mechanically.
 
 ```
-Your code + Criteria → N executor agents → Aggregated findings
-                        (fresh context each)
+Your code + Criteria → Partitioner → N reviewer agents → Aggregated findings
+                       (per-criterion)  (fresh context each)
 ```
 
 ## Quick Start
@@ -31,8 +29,8 @@ deskcheck init
 # Review your branch changes against main
 deskcheck diff main
 
-# Review a specific file
-deskcheck "src/services/PaymentService.ts"
+# Review with natural language
+deskcheck "review src/services/"
 
 # Open the web dashboard
 deskcheck serve
@@ -42,15 +40,15 @@ deskcheck serve
 
 ### 1. You define criteria as markdown
 
-Each criterion is a markdown file with YAML frontmatter that says **what to check**, **which files to check**, and **how important it is**:
+Each criterion is a markdown file with YAML frontmatter that says **what to check**, **which files to check**, and **how to partition the work**:
 
 ```yaml
 ---
 description: "Checks for common security vulnerabilities"
-severity: critical
 globs:
   - "src/**/*.ts"
   - "!src/**/*.test.ts"
+partition: one task per file
 model: sonnet
 ---
 
@@ -60,7 +58,7 @@ You are a security reviewer. Check for:
 2. **SQL injection** — string concatenation in database queries
 3. **Missing input validation** — user input used without sanitization
 
-For each issue, report the severity, file, line number, and a fix suggestion.
+For each issue, report the severity, file, line range, and a fix suggestion.
 ```
 
 Put criteria in `deskcheck/criteria/` — organize them however you like:
@@ -75,56 +73,52 @@ deskcheck/criteria/
     └── error-handling.md
 ```
 
-### 2. Deskcheck matches criteria to your files
+### 2. The pipeline runs in four steps
 
-Each criterion has `globs` that define which files it applies to. When you run `deskcheck diff main`, it gets the list of changed files and matches them against every criterion's globs. Each match becomes a **task**: one file + one criterion.
+```
+Matching → Partitioning → Reviewing → Complete
+```
 
-### 3. Each task runs in a fresh agent
+1. **Matching** — files from `git diff` (or a natural-language file list) are matched against each criterion's glob patterns. Programmatic, no LLM.
+2. **Partitioning** — for each matched criterion, a fresh agent reads the `partition` instruction and splits the matched files into focused subtasks. The partitioner can inspect files with Read/Grep/Glob to make informed decisions (e.g. "one method per task" requires reading the file to list methods).
+3. **Reviewing** — each subtask runs in a fresh reviewer agent with only the criterion instructions, the assigned files, and the scope. Reviewers fetch their own context from disk (diffs for change-mode, full files for all-mode). Up to 5 run concurrently.
+4. **Complete** — issues are aggregated by file, criterion, and severity.
 
-Every task is executed by a new Claude agent with only:
-- The file content (or diff)
-- The criterion's instructions
-- Access to read tools (Read, Glob, Grep) for additional context
+### 3. Findings are aggregated
 
-No context leakage between tasks. A fresh agent reviewing one file against one set of rules catches issues with near-100% reliability.
-
-### 4. Findings are aggregated
-
-Results are grouped by file, criterion, and severity. You can browse them in the terminal, as markdown (for PR comments), as JSON (for tooling), or in the **web dashboard**:
-
-![File detail view](docs/screenshots/file-detail.png)
+Results are grouped and viewable in the terminal, as markdown (for PR comments), as JSON (for tooling), or in the **web dashboard** (`deskcheck serve`). The dashboard shows a four-step pipeline bar, per-criterion subtask breakdowns, partitioner reasoning, and issue cards with code snippets and suggested fixes.
 
 ## CLI Commands
 
 ### `deskcheck diff [git-args...]`
 
-Deterministic review of git changes. No LLM planner — passes args directly to `git diff`.
+Deterministic review of git changes. No LLM resolver — scope and file list are derived directly from `git diff`.
 
 ```bash
-deskcheck diff main                                      # Changes vs main
-deskcheck diff --staged                                  # Staged changes only
-deskcheck diff HEAD~3                                    # Last 3 commits
-deskcheck diff main -- src/services/                     # Scoped to a directory
-deskcheck diff main --dry-run                            # Preview plan without executing
-deskcheck diff main --fail-on=critical                   # Exit 1 if critical findings (for CI)
-deskcheck diff main --format=markdown                    # Markdown output (for PR comments)
-deskcheck diff main --criteria=dto-enforcement           # Only run one criterion
-deskcheck diff main --criteria=security,naming           # Only run specific criteria
+deskcheck diff                          # Working tree vs HEAD (staged + unstaged)
+deskcheck diff main                     # Changes vs main
+deskcheck diff HEAD~3                   # Last 3 commits
+deskcheck diff main --dry-run           # Preview plan (runs partitioners) without executing reviewers
+deskcheck diff main --fail-on=critical  # Exit 1 if critical findings (for CI)
+deskcheck diff main --format=markdown   # Markdown output (for PR comments)
+deskcheck diff main --criteria=security # Only run one criterion
 ```
 
 ### `deskcheck "<prompt>"`
 
-Natural language review — an LLM agent interprets what you want to check.
+Natural-language review — a resolver agent interprets what you want to check and produces a `{ scope, files }` pair, then the same downstream pipeline runs.
 
 ```bash
-deskcheck "src/services/OrderService.ts"
+deskcheck "review src/services/"
 deskcheck "check the auth module"
-deskcheck "the calculate method in Commission.ts"
+deskcheck "review changes against develop"
+deskcheck "review src/" --scope changes:main     # Override resolver's scope inference
+deskcheck "review src/" --criteria=security       # Only run specific criteria
 ```
 
 ### `deskcheck serve`
 
-Web dashboard with live updates. Shows all runs, task progress, usage/cost tracking, and findings with filtering.
+Web dashboard with live updates via SSE. Four views: run list, review overview (pipeline + criteria + issues), criterion detail (partitioner reasoning + subtask list), and subtask detail (issue cards with code).
 
 ```bash
 deskcheck serve              # Start on default port (3000)
@@ -144,7 +138,7 @@ deskcheck show --fail-on=warning      # Exit 1 if warnings or worse
 
 ### `deskcheck watch [plan-id]`
 
-Live terminal tree view of a run in progress.
+Live terminal tree view of a run in progress. Shows partition decisions and per-subtask `[focus]` annotations.
 
 ### `deskcheck list`
 
@@ -160,31 +154,9 @@ deskcheck test controller-conventions             # Run tests for one criterion
 deskcheck test --criteria=dto-enforcement,naming  # Run tests for specific criteria
 ```
 
-Test fixtures live in `deskcheck/tests/` mirroring the criteria directory structure. Each test case has a fixture file (code to review) and an `expected.md` (what should be found). An LLM judge compares actual findings against expectations and produces scores:
-
-- **Recall** — Were expected violations found?
-- **Precision** — Were all findings legitimate?
-- **Scope compliance** — Did every finding come from the criterion's checklist?
-
-Results are persisted in `.deskcheck/test-runs/` for inspection.
-
 ### `deskcheck init`
 
 Scaffold config and criteria directory for a new project.
-
-## Web Dashboard
-
-Start with `deskcheck serve` and open `http://localhost:3000`.
-
-**Run overview** — progress bar, usage/cost tracking, sortable task table with severity filters, and file coverage:
-
-![Run overview](docs/screenshots/run-overview.png)
-
-**File detail** — click any file to see all findings across criteria, with severity filtering and grouping options:
-
-![File detail](docs/screenshots/file-detail.png)
-
-The dashboard uses SSE for live updates — watch tasks complete in real time during execution.
 
 ## Criterion Reference
 
@@ -193,10 +165,10 @@ The dashboard uses SSE for live updates — watch tasks complete in real time du
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `description` | Yes | — | Human-readable description shown in reports |
-| `severity` | Yes | — | Importance: `critical`, `high`, `medium`, `low` |
 | `globs` | Yes | — | File patterns to match. Prefix with `!` to exclude |
-| `mode` | No | `"One task per file"` | How to split files into tasks (natural language) |
-| `model` | No | `"haiku"` | Claude model: `haiku`, `sonnet`, `opus` |
+| `partition` | No | `"one task per matched file"` | Natural-language instruction for how the partitioner agent should split matched files into subtasks |
+| `model` | No | `"haiku"` | Claude model for reviewer agents: `haiku`, `sonnet`, `opus` |
+| `tools` | No | `[]` | Extra tools available to reviewers for this criterion (e.g. `["WebFetch"]`), layered on top of built-ins |
 
 ### Choosing the Right Model
 
@@ -212,18 +184,31 @@ The dashboard uses SSE for live updates — watch tasks complete in real time du
 
 ### The Detective Prompt
 
-The markdown body below the frontmatter is the **detective prompt** — instructions given to each executor agent. Include:
+The markdown body below the frontmatter is the **detective prompt** — instructions given to each reviewer agent. Include:
 
 - **What to check** — specific patterns and violations
 - **What NOT to check** — exclusions to reduce false positives
 - **Severity guidance** — when to report critical vs warning vs info
 
-The agent has read access to the project, so your prompt can reference other files:
+Reviewers have built-in tools (Read, Grep, Glob, Bash) and fetch their own context based on the scope, so your prompt can reference other files:
 
 ```markdown
 Read `.eslintrc.js` to understand the project's linting config.
 Then check for architectural patterns that ESLint can't catch.
 ```
+
+### Partition Instruction
+
+The `partition` field tells the partitioner agent how to split matched files into subtasks. Examples:
+
+```yaml
+partition: one task per file               # Simple, default-like
+partition: one public method per task       # Sub-file: same file appears in multiple subtasks with different focus
+partition: group each test with its source  # Cross-file grouping
+partition: bundle all controllers together  # Single grouped review
+```
+
+The partitioner agent reads this instruction, inspects the matched files using its tools, and produces subtasks with `files`, optional `focus` (sub-file narrowing), and optional `hint` (reasoning for the grouping).
 
 ## Configuration
 
@@ -239,7 +224,8 @@ Configuration lives in `.deskcheck/config.json` (created by `deskcheck init`):
     "mcp_servers": {}
   },
   "agents": {
-    "planner": { "model": "haiku" },
+    "resolver": { "model": "haiku" },
+    "partitioner": { "model": "haiku" },
     "executor": {},
     "evaluator": { "model": "haiku" },
     "judge": { "model": "opus" }
@@ -247,8 +233,10 @@ Configuration lives in `.deskcheck/config.json` (created by `deskcheck init`):
 }
 ```
 
-- The **executor model** comes from each criterion's `model` field, not from config. This lets cheap checks use `haiku` and important checks use `sonnet`.
-- The **judge model** (used by `deskcheck test`) defaults to `opus` for accurate evaluation of findings against expectations.
+- **Built-in reviewer tools** (`Read`, `Grep`, `Glob`, `Bash`) are always available regardless of `shared.allowed_tools`. The config tools layer on top.
+- The **reviewer model** comes from each criterion's `model` field, not from config.
+- The **partitioner model** comes from `agents.partitioner.model` (shared across all criteria).
+- The **resolver model** (for natural-language `deskcheck "<prompt>"`) comes from `agents.resolver.model`.
 
 ## CI Integration
 
@@ -280,26 +268,36 @@ Deskcheck can run as an MCP server for Claude Code integration:
 }
 ```
 
-## Usage Tracking
+## Demo & Development
 
-Every run tracks token usage and cost per task. The web dashboard shows totals (cost, input/output tokens) and per-task breakdowns, so you can see exactly how much each review costs and which criteria are most expensive.
+### Seed fixtures for UI work (free, no API calls)
 
-## Development
+```bash
+npm run seed -- --clean     # Write 5 synthetic plans exercising every UI state
+deskcheck serve             # http://localhost:3000
+```
+
+### Run a real review against the demo project (~5–15¢)
+
+```bash
+cd examples/demo-project
+git init -q && git add -A && git commit -qm init   # one-time setup
+deskcheck "review src/"                              # runs resolver + partitioners + reviewers
+```
+
+See [`examples/demo-project/README.md`](examples/demo-project/README.md) for the planted issues and expected findings.
+
+### Development setup
 
 The fastest way to get started is with the included **Dev Container** (VS Code + Docker):
 
 1. Open the repo in VS Code
-2. When prompted, click **"Reopen in Container"** (or run `Dev Containers: Reopen in Container` from the command palette)
+2. When prompted, click **"Reopen in Container"**
 3. Press **Ctrl+Shift+B** to launch the dev environment
 
-This starts three processes in a single terminal group:
-- **Backend server** on port 3000 (builds TypeScript, then runs `deskcheck serve`)
-- **TypeScript watch** (`tsc --watch` for backend changes)
-- **Vite dev server** on port 5173 (Vue UI with hot reload)
+This starts backend server (port 3000), TypeScript watch, and Vite dev server (port 5173).
 
-Open `http://localhost:5173` for UI development — API requests are proxied to the backend automatically.
-
-### Without Dev Container
+Without Dev Container:
 
 ```bash
 # Terminal 1: backend
@@ -311,10 +309,6 @@ npm run dev
 # Terminal 3: UI with hot reload
 cd ui && npm install && npm run dev
 ```
-
-## Disclaimer
-
-This tool was vibe-coded in a single day using [Claude Code](https://claude.ai/claude-code). The architecture, implementation, web UI, and even this README were built through conversation with Claude Opus 4.6. It works, we use it, but it hasn't been battle-tested at scale. Expect rough edges. Contributions welcome.
 
 ## License
 

@@ -18,26 +18,12 @@ function parseReference(raw: Record<string, unknown>): Reference {
   return {
     file: String(raw.file ?? ""),
     symbol: typeof raw.symbol === "string" ? raw.symbol : null,
-    line: typeof raw.line === "number" ? raw.line : null,
-    code: typeof raw.code === "string" ? raw.code : null,
+    startLine: typeof raw.startLine === "number" ? raw.startLine : 0,
+    endLine: typeof raw.endLine === "number" ? raw.endLine : (typeof raw.startLine === "number" ? raw.startLine : 0),
+    contextLines: typeof raw.contextLines === "number" ? raw.contextLines : 3,
+    code: null,
     suggestedCode: typeof raw.suggestedCode === "string" ? raw.suggestedCode : null,
     note: typeof raw.note === "string" ? raw.note : null,
-  };
-}
-
-function legacyFindingToIssue(record: Record<string, unknown>): Issue {
-  return {
-    severity: String(record.severity ?? "info") as Issue["severity"],
-    description: String(record.description ?? ""),
-    suggestion: typeof record.suggestion === "string" ? record.suggestion : null,
-    references: [{
-      file: String(record.file ?? ""),
-      symbol: null,
-      line: typeof record.line === "number" ? record.line : null,
-      code: null,
-      suggestedCode: null,
-      note: null,
-    }],
   };
 }
 
@@ -67,23 +53,21 @@ function parseIssues(output: string): Issue[] {
     const severity = String(record.severity ?? "info");
     if (!VALID_SEVERITIES.has(severity)) continue;
 
-    if (Array.isArray(record.references)) {
-      const references: Reference[] = [];
-      for (const ref of record.references) {
-        if (typeof ref === "object" && ref !== null) {
-          references.push(parseReference(ref as Record<string, unknown>));
-        }
+    if (!Array.isArray(record.references) || record.references.length === 0) continue;
+
+    const references: Reference[] = [];
+    for (const ref of record.references) {
+      if (typeof ref === "object" && ref !== null) {
+        references.push(parseReference(ref as Record<string, unknown>));
       }
-      if (references.length === 0) continue;
-      issues.push({
-        severity: severity as Issue["severity"],
-        description: String(record.description ?? ""),
-        suggestion: typeof record.suggestion === "string" ? record.suggestion : null,
-        references,
-      });
-    } else {
-      issues.push(legacyFindingToIssue(record));
     }
+    if (references.length === 0) continue;
+    issues.push({
+      severity: severity as Issue["severity"],
+      description: String(record.description ?? ""),
+      suggestion: typeof record.suggestion === "string" ? record.suggestion : null,
+      references,
+    });
   }
   return issues;
 }
@@ -102,8 +86,8 @@ describe("parseIssues", () => {
         references: [{
           file: "app/Services/FenerumService.php",
           symbol: "FenerumService::getSubscription",
-          line: 47,
-          code: "public function getSubscription(int $id): array",
+          startLine: 47,
+          endLine: 55,
           suggestedCode: "public function getSubscription(int $id): SubscriptionData",
           note: null,
         }],
@@ -117,8 +101,9 @@ describe("parseIssues", () => {
       expect(issues[0]!.references).toHaveLength(1);
       expect(issues[0]!.references[0]!.file).toBe("app/Services/FenerumService.php");
       expect(issues[0]!.references[0]!.symbol).toBe("FenerumService::getSubscription");
-      expect(issues[0]!.references[0]!.line).toBe(47);
-      expect(issues[0]!.references[0]!.code).toBe("public function getSubscription(int $id): array");
+      expect(issues[0]!.references[0]!.startLine).toBe(47);
+      expect(issues[0]!.references[0]!.endLine).toBe(55);
+      expect(issues[0]!.references[0]!.code).toBeNull();
       expect(issues[0]!.references[0]!.suggestedCode).toBe("public function getSubscription(int $id): SubscriptionData");
     });
 
@@ -128,8 +113,8 @@ describe("parseIssues", () => {
         description: "Three handlers duplicate HTTP client initialization",
         suggestion: "Extract a shared FenerumApiClient service",
         references: [
-          { file: "Handlers/SyncSubscriptions.php", symbol: "SyncSubscriptions::handle", line: 23, code: "$client = Http::withHeaders(...)", suggestedCode: null, note: "First occurrence" },
-          { file: "Handlers/SyncInvoices.php", symbol: "SyncInvoices::handle", line: 19, code: "$client = Http::withHeaders(...)", suggestedCode: null, note: "Duplicated" },
+          { file: "Handlers/SyncSubscriptions.php", symbol: "SyncSubscriptions::handle", startLine: 23, endLine: 23, suggestedCode: null, note: "First occurrence" },
+          { file: "Handlers/SyncInvoices.php", symbol: "SyncInvoices::handle", startLine: 19, endLine: 19, suggestedCode: null, note: "Duplicated" },
         ],
       }]);
 
@@ -153,7 +138,8 @@ describe("parseIssues", () => {
       expect(issues).toHaveLength(1);
       expect(issues[0]!.suggestion).toBeNull();
       expect(issues[0]!.references[0]!.symbol).toBeNull();
-      expect(issues[0]!.references[0]!.line).toBeNull();
+      expect(issues[0]!.references[0]!.startLine).toBe(0);
+      expect(issues[0]!.references[0]!.endLine).toBe(0);
       expect(issues[0]!.references[0]!.code).toBeNull();
       expect(issues[0]!.references[0]!.suggestedCode).toBeNull();
       expect(issues[0]!.references[0]!.note).toBeNull();
@@ -171,71 +157,16 @@ describe("parseIssues", () => {
     });
   });
 
-  describe("backwards compatibility with old Finding format", () => {
-    it("converts old Finding to Issue with single reference", () => {
+  describe("items without references are skipped", () => {
+    it("skips items with no references array", () => {
       const input = JSON.stringify([{
         severity: "critical",
         file: "src/auth.ts",
-        line: 42,
-        description: "SQL injection vulnerability",
-        suggestion: "Use parameterized queries",
-      }]);
-
-      const issues = parseIssues(input);
-      expect(issues).toHaveLength(1);
-      expect(issues[0]!.severity).toBe("critical");
-      expect(issues[0]!.description).toBe("SQL injection vulnerability");
-      expect(issues[0]!.suggestion).toBe("Use parameterized queries");
-      expect(issues[0]!.references).toHaveLength(1);
-      expect(issues[0]!.references[0]!.file).toBe("src/auth.ts");
-      expect(issues[0]!.references[0]!.line).toBe(42);
-      expect(issues[0]!.references[0]!.symbol).toBeNull();
-      expect(issues[0]!.references[0]!.code).toBeNull();
-      expect(issues[0]!.references[0]!.suggestedCode).toBeNull();
-    });
-
-    it("handles old Finding with null line", () => {
-      const input = JSON.stringify([{
-        severity: "info",
-        file: "README.md",
-        line: null,
-        description: "Missing section",
+        description: "No references field",
         suggestion: null,
       }]);
 
-      const issues = parseIssues(input);
-      expect(issues).toHaveLength(1);
-      expect(issues[0]!.references[0]!.line).toBeNull();
-      expect(issues[0]!.suggestion).toBeNull();
-    });
-
-    it("handles mixed old and new formats in same array", () => {
-      const input = JSON.stringify([
-        {
-          severity: "warning",
-          file: "old-style.ts",
-          line: 10,
-          description: "Old format finding",
-          suggestion: null,
-        },
-        {
-          severity: "critical",
-          description: "New format issue",
-          suggestion: "Fix it",
-          references: [{ file: "new-style.ts", symbol: "Foo::bar", line: 20, code: "bad code", suggestedCode: "good code", note: null }],
-        },
-      ]);
-
-      const issues = parseIssues(input);
-      expect(issues).toHaveLength(2);
-      // Old format
-      expect(issues[0]!.references).toHaveLength(1);
-      expect(issues[0]!.references[0]!.file).toBe("old-style.ts");
-      expect(issues[0]!.references[0]!.symbol).toBeNull();
-      // New format
-      expect(issues[1]!.references).toHaveLength(1);
-      expect(issues[1]!.references[0]!.symbol).toBe("Foo::bar");
-      expect(issues[1]!.references[0]!.code).toBe("bad code");
+      expect(parseIssues(input)).toHaveLength(0);
     });
   });
 

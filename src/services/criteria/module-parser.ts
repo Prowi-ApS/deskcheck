@@ -1,14 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import type { AgentModel, ModuleSeverity, ReviewModule } from "../../types/criteria.js";
-
-const VALID_SEVERITIES: ReadonlySet<string> = new Set<ModuleSeverity>([
-  "critical",
-  "high",
-  "medium",
-  "low",
-]);
+import type { AgentModel, ReviewModule } from "../../types/criteria.js";
 
 const VALID_MODELS: ReadonlySet<string> = new Set<AgentModel>([
   "haiku",
@@ -16,7 +9,7 @@ const VALID_MODELS: ReadonlySet<string> = new Set<AgentModel>([
   "opus",
 ]);
 
-const DEFAULT_MODE = "Create one review per changed file";
+const DEFAULT_PARTITION = "one task per matched file";
 const DEFAULT_MODEL: AgentModel = "haiku";
 
 /**
@@ -49,12 +42,6 @@ export function parseModule(filePath: string, basePath: string): ReviewModule {
     );
   }
 
-  if (!VALID_SEVERITIES.has(frontmatter.severity)) {
-    throw new Error(
-      `Invalid criterion ${relativePath}: "severity" must be one of: ${[...VALID_SEVERITIES].join(", ")}. Got: ${JSON.stringify(frontmatter.severity)}`,
-    );
-  }
-
   if (!Array.isArray(frontmatter.globs) || frontmatter.globs.length === 0) {
     throw new Error(
       `Invalid criterion ${relativePath}: "globs" is required and must be a non-empty array of strings`,
@@ -71,16 +58,34 @@ export function parseModule(filePath: string, basePath: string): ReviewModule {
 
   // --- Apply defaults for optional fields ---
 
-  const mode =
-    typeof frontmatter.mode === "string" && frontmatter.mode.trim() !== ""
-      ? frontmatter.mode
-      : DEFAULT_MODE;
+  const partition =
+    typeof frontmatter.partition === "string" && frontmatter.partition.trim() !== ""
+      ? frontmatter.partition
+      : DEFAULT_PARTITION;
 
   const model = frontmatter.model ?? DEFAULT_MODEL;
   if (!VALID_MODELS.has(model)) {
     throw new Error(
       `Invalid criterion ${relativePath}: "model" must be one of: ${[...VALID_MODELS].join(", ")}. Got: ${JSON.stringify(model)}`,
     );
+  }
+
+  // tools — optional array of strings, defaults to empty.
+  let tools: string[] = [];
+  if (frontmatter.tools !== undefined) {
+    if (!Array.isArray(frontmatter.tools)) {
+      throw new Error(
+        `Invalid criterion ${relativePath}: "tools" must be an array of strings. Got: ${JSON.stringify(frontmatter.tools)}`,
+      );
+    }
+    for (const t of frontmatter.tools) {
+      if (typeof t !== "string" || t.trim() === "") {
+        throw new Error(
+          `Invalid criterion ${relativePath}: each entry in "tools" must be a non-empty string. Got: ${JSON.stringify(t)}`,
+        );
+      }
+    }
+    tools = frontmatter.tools as string[];
   }
 
   // --- Build the criterion ID from relative path without extension ---
@@ -91,10 +96,10 @@ export function parseModule(filePath: string, basePath: string): ReviewModule {
     id,
     file: relativeFile.split(path.sep).join("/"),
     description: frontmatter.description,
-    severity: frontmatter.severity as ModuleSeverity,
     globs: frontmatter.globs as string[],
-    mode,
+    partition,
     model: model as AgentModel,
+    tools,
     prompt: content.trim(),
   };
 }
@@ -103,7 +108,7 @@ export function parseModule(filePath: string, basePath: string): ReviewModule {
  * Discover all criteria by recursively scanning a directory for `.md` files.
  *
  * Each markdown file is parsed for YAML frontmatter containing criterion metadata
- * (description, severity, globs, etc.) and the markdown body becomes the detective prompt.
+ * (description, globs, etc.) and the markdown body becomes the detective prompt.
  *
  * @param modulesDir - Path to the directory containing criterion markdown files.
  * @returns Array of parsed ReviewModule objects, sorted by ID for deterministic ordering.

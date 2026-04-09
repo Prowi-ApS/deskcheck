@@ -1,0 +1,84 @@
+/* =============================================================================
+   Design tokens — dark theme only, taken from improvements/ui-mock.jsx.
+   ============================================================================= */
+
+:root {
+  /* Surfaces */
+  --bg: #0c0e14;
+  --surface: #14171f;
+  --surface-hover: #1a1e28;
+  --surface-alt: #181c26;
+  --border: #252a36;
+  --border-subtle: #1e2230;
+
+  /* Text */
+  --text: #dfe1e8;
+  --text-muted: #7c819a;
+  --text-dim: #4e5368;
+
+  /* Accent */
+  --accent: #5b7fff;
+  --accent-soft: #2a3660;
+
+  /* Severity / status palettes */
+  --critical-bg: #2d151a;
+  --critical-text: #ff5c6e;
+  --critical-border: #4a2530;
+
+  --warning-bg: #2d2214;
+  --warning-text: #f0a83e;
+  --warning-border: #4a3820;
+
+  --info-bg: #142030;
+  --info-text: #58a6f5;
+  --info-border: #203850;
+
+  --success-bg: #132818;
+  --success-text: #4dd67c;
+  --success-border: #204a30;
+
+  /* Plain colors used for dots and accents */
+  --green: #4dd67c;
+  --amber: #f0a83e;
+  --red: #ff5c6e;
+  --blue: #58a6f5;
+  --purple: #a07cff;
+  --teal: #4cd6b8;
+  --grey: #4e5368;
+
+  /* Fonts — system fallbacks only, no external imports */
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text);
+}

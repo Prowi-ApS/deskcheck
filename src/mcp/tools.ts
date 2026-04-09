@@ -3,10 +3,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ReviewConfig } from "../config/types.js";
 import type { Issue, Reference } from "../types/review.js";
-import type { AgentModel } from "../types/criteria.js";
 import { ReviewStorageService } from "../services/review/ReviewStorageService.js";
-import { extractContext } from "../services/review/ReviewContextExtractorService.js";
-import { discoverModules, parseModule } from "../services/criteria/module-parser.js";
+import { discoverModules } from "../services/criteria/module-parser.js";
 import { findMatchingModules } from "../services/criteria/glob-matcher.js";
 
 /**
@@ -49,25 +47,25 @@ export function registerReviewTools(
       "Create a new review plan. Returns the plan object with its generated plan_id.",
     inputSchema: {
       name: z.string().describe("Human-readable name for the review plan"),
-      source_type: z
-        .enum(["diff", "file", "symbol"])
-        .describe("How source content is provided: diff, file, or symbol"),
-      source_target: z
-        .string()
-        .describe(
-          "Target identifier: branch/ref for diff, file path for file, symbol name for symbol",
-        ),
-      source_file: z
+      scope_type: z
+        .enum(["all", "changes"])
+        .describe("'all' to review full files, 'changes' to review only diffs against a git ref"),
+      scope_ref: z
         .string()
         .optional()
-        .describe("File containing the symbol (only for symbol mode)"),
+        .describe("For scope_type='changes': git ref to compare against (branch, commit, or HEAD)"),
     },
-  }, ({ name, source_type, source_target, source_file }) => {
+  }, ({ name, scope_type, scope_ref }) => {
     try {
-      const plan = storage.createPlan(name, {
-        type: source_type,
-        target: source_target,
-        file: source_file,
+      const scope =
+        scope_type === "changes"
+          ? { type: "changes" as const, ref: scope_ref ?? "HEAD" }
+          : { type: "all" as const };
+
+      const plan = storage.createPlan(name, scope, {
+        command: "deskcheck-mcp",
+        args: ["start_review_plan", name],
+        cwd: projectRoot,
       });
 
       return {
@@ -105,9 +103,8 @@ export function registerReviewTools(
         review_id: match.module.id,
         review_file: match.module.file,
         description: match.module.description,
-        severity: match.module.severity,
         globs: match.module.globs,
-        mode: match.module.mode,
+        partition: match.module.partition,
         model: match.module.model,
         matched_files: match.matchedFiles,
       }));
@@ -238,50 +235,14 @@ export function registerReviewTools(
 
   server.registerTool("start_review", {
     description:
-      "Claim a review task and return everything the executor needs: context (diff/file/symbol content), the criterion prompt, and task metadata.",
+      "Claim a review task and return its metadata. Reviewers fetch their own context (diffs or full file contents) from the scope on the returned task.",
     inputSchema: {
       plan_id: z.string().describe("The plan ID"),
       task_id: z.string().describe("The task ID to claim"),
     },
   }, ({ plan_id, task_id }) => {
     try {
-      const plan = storage.getPlan(plan_id);
-      const task = plan.tasks[task_id];
-
-      if (!task) {
-        return {
-          content: [{
-            type: "text" as const,
-            text: `Error: Task "${task_id}" not found in plan "${plan_id}"`,
-          }],
-          isError: true,
-        };
-      }
-
-      // Extract context based on source type
-      const symbol = plan.source.type === "symbol" ? plan.source.target : undefined;
-      const extracted = extractContext(
-        plan.source.type,
-        plan.source.target,
-        task.files,
-        projectRoot,
-        symbol,
-      );
-
-      // Read the criterion prompt
-      const moduleFilePath = path.resolve(projectRoot, task.review_file);
-      const reviewModule = parseModule(
-        moduleFilePath,
-        path.resolve(projectRoot, config.modules_dir),
-      );
-
-      // Claim the task via storage
-      const claimedTask = storage.claimTask(plan_id, task_id, {
-        contextType: extracted.contextType,
-        content: extracted.content,
-        symbol: extracted.symbol ?? undefined,
-        prompt: reviewModule.prompt,
-      });
+      const claimedTask = storage.claimTask(plan_id, task_id);
 
       return {
         content: [{
@@ -290,11 +251,9 @@ export function registerReviewTools(
             task_id: claimedTask.task_id,
             review_id: claimedTask.review_id,
             files: claimedTask.files,
+            scope: claimedTask.scope,
             hint: claimedTask.hint,
             model: claimedTask.model,
-            context_type: claimedTask.context_type,
-            context: claimedTask.context,
-            symbol: claimedTask.symbol,
             prompt: claimedTask.prompt,
           }, null, 2),
         }],
@@ -337,8 +296,9 @@ export function registerReviewTools(
                 z.object({
                   file: z.string().describe("File path"),
                   symbol: z.string().nullable().optional().describe("Semantic symbol anchor, e.g. ClassName::method"),
-                  line: z.number().nullable().optional().describe("Line number for navigation"),
-                  code: z.string().nullable().optional().describe("Current code snippet"),
+                  startLine: z.number().optional().describe("Start line of the flagged range (inclusive)"),
+                  endLine: z.number().optional().describe("End line of the flagged range (inclusive)"),
+                  contextLines: z.number().optional().describe("Lines of surrounding context to include (default 3)"),
                   suggestedCode: z.string().nullable().optional().describe("Suggested replacement code"),
                   note: z.string().nullable().optional().describe("Why this reference is relevant"),
                 }),
@@ -357,8 +317,10 @@ export function registerReviewTools(
         references: i.references.map((r): Reference => ({
           file: r.file,
           symbol: r.symbol ?? null,
-          line: r.line ?? null,
-          code: r.code ?? null,
+          startLine: r.startLine ?? 0,
+          endLine: r.endLine ?? r.startLine ?? 0,
+          contextLines: r.contextLines ?? 3,
+          code: null,
           suggestedCode: r.suggestedCode ?? null,
           note: r.note ?? null,
         })),

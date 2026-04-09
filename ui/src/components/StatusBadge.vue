@@ -1,57 +1,42 @@
 <script setup lang="ts">
-defineProps<{
-  status: string
-}>()
+import { computed } from 'vue'
+import Badge from './Badge.vue'
+
+const props = defineProps<{ status: string }>()
+
+const palette = computed(() => {
+  switch (props.status) {
+    case 'complete':
+      return {
+        bg: 'var(--success-bg)',
+        color: 'var(--success-text)',
+        border: 'var(--success-border)',
+      }
+    case 'executing':
+    case 'ready':
+      return {
+        bg: 'var(--info-bg)',
+        color: 'var(--info-text)',
+        border: 'var(--info-border)',
+      }
+    case 'failed':
+      return {
+        bg: 'var(--critical-bg)',
+        color: 'var(--critical-text)',
+        border: 'var(--critical-border)',
+      }
+    default:
+      return {
+        bg: 'var(--surface)',
+        color: 'var(--text-muted)',
+        border: 'var(--border)',
+      }
+  }
+})
 </script>
 
 <template>
-  <span class="badge" :class="`badge-${status}`">{{ status }}</span>
+  <Badge :bg="palette.bg" :color="palette.color" :border="palette.border">
+    {{ status }}
+  </Badge>
 </template>
-
-<style scoped>
-.badge {
-  display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.badge-planning {
-  background: rgba(171, 71, 188, 0.2);
-  color: var(--color-planning);
-}
-
-.badge-ready {
-  background: rgba(79, 195, 247, 0.15);
-  color: var(--color-ready);
-}
-
-.badge-executing {
-  background: rgba(79, 195, 247, 0.15);
-  color: var(--color-executing);
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-.badge-complete {
-  background: rgba(102, 187, 106, 0.2);
-  color: var(--color-complete);
-}
-
-.badge-error {
-  background: rgba(239, 83, 80, 0.2);
-  color: var(--color-error);
-}
-
-@keyframes pulse-glow {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-</style>

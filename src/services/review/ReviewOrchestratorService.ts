@@ -1,9 +1,9 @@
 import path from "node:path";
 import { ReviewStorageService } from "./ReviewStorageService.js";
-import { extractContext } from "./ReviewContextExtractorService.js";
 import { buildExecutorPrompt } from "../../prompts/ExecutorPrompt.js";
 import { parseIssues } from "../FindingsParserService.js";
 import { ExecutorService } from "../ExecutorService.js";
+import { resolveCodeSnippets } from "./CodeSnippetService.js";
 import type { ReviewConfig } from "../../config/types.js";
 import type {
   ReviewTask,
@@ -97,39 +97,33 @@ export class ReviewOrchestratorService {
 
       let taskUsage: TaskUsage | null = null;
       try {
-        // Extract context and claim the task
-        const extracted = extractContext(
-          plan.source.type,
-          plan.source.target,
-          task.files,
-          this.projectRoot,
-          task.symbol ?? undefined,
-        );
+        // The criterion prompt was stamped onto the task at addTask time;
+        // claimTask only flips status to in_progress and records started_at.
+        const claimedTask = storage.claimTask(planId, task.task_id);
 
-        // Read the criterion prompt from the module file
-        const modulePrompt = task.prompt ?? plan.modules[task.review_id]?.description ?? "";
-
-        // Claim the task in storage (sets status to in_progress, fills context)
-        storage.claimTask(planId, task.task_id, {
-          contextType: extracted.contextType,
-          content: extracted.content,
-          symbol: extracted.symbol ?? undefined,
-          prompt: modulePrompt,
-        });
-
-        // Re-read the task with filled context for prompt building
-        const claimedPlan = storage.getPlan(planId);
-        const claimedTask = claimedPlan.tasks[task.task_id]!;
-
-        // Build the executor prompt
+        // Build the executor prompt — reviewer fetches its own context via tools.
         const executorPrompt = buildExecutorPrompt(claimedTask);
 
-        // Spawn executor agent via ExecutorService
-        const result = await this.executorService.execute(executorPrompt, modelId);
+        // Spawn executor agent via ExecutorService. Per-criterion tools
+        // (from the criterion's frontmatter) are layered on top of built-ins
+        // and config tools via `extraTools`.
+        const result = await this.executorService.execute(executorPrompt, modelId, {
+          extraTools: claimedTask.tools,
+        });
         taskUsage = result.usage;
 
-        // Parse issues from executor output
-        const issues = parseIssues(result.resultText);
+        // Persist the full SDK message stream as a side-file for inspection.
+        try {
+          storage.writeTaskLog(planId, task.task_id, result.messages);
+        } catch (logErr) {
+          // Don't fail the task if transcript persistence fails — log and move on.
+          console.error(
+            `[deskcheck] Warning: failed to write task log for ${task.task_id}: ${logErr instanceof Error ? logErr.message : String(logErr)}`,
+          );
+        }
+
+        // Parse issues from executor output and resolve code snippets from disk
+        const issues = resolveCodeSnippets(parseIssues(result.resultText), this.projectRoot);
 
         // Complete the task in storage
         storage.completeTask(planId, task.task_id, issues, taskUsage);

@@ -2,9 +2,6 @@
 // Criterion Types (parsed from criterion markdown files)
 // =============================================================================
 
-/** Severity level assigned to a criterion (how important it is). */
-export type ModuleSeverity = "critical" | "high" | "medium" | "low";
-
 /** Claude model tier used for agent execution. */
 export type AgentModel = "haiku" | "sonnet" | "opus";
 
@@ -16,14 +13,18 @@ export interface ReviewModule {
   file: string;
   /** Human-readable description from frontmatter. */
   description: string;
-  /** How important this criterion's findings are. */
-  severity: ModuleSeverity;
   /** File glob patterns that determine which files this criterion checks. */
   globs: string[];
-  /** Natural language instruction for how to split files into tasks. */
-  mode: string;
+  /** Natural language instruction for how to split matched files into subtasks. */
+  partition: string;
   /** Claude model tier to use for executor agents. */
   model: AgentModel;
+  /**
+   * Extra tool names to make available to reviewers running this criterion,
+   * layered on top of the built-in reviewer tools and config-level tools.
+   * Empty by default.
+   */
+  tools: string[];
   /** The detective prompt (markdown body of the criterion) given to executor agents. */
   prompt: string;
 }
