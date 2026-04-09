@@ -6,6 +6,7 @@ import type { FindingSeverity } from '../types'
 import Crumb from '../components/Crumb.vue'
 import Meta from '../components/Meta.vue'
 import Stat from '../components/Stat.vue'
+import TokenCard from '../components/TokenCard.vue'
 import SeverityBadge from '../components/SeverityBadge.vue'
 import FilterChips, { type ChipOption } from '../components/FilterChips.vue'
 import { formatDuration, formatTokens, formatCost } from '../utils/format'
@@ -29,15 +30,8 @@ const usage = computed(() => {
   return r?.usage ?? null
 })
 
-const tokensDisplay = computed(() => {
-  const u = usage.value
-  if (!u) return '—'
-  return `${formatTokens(u.input_tokens)} in / ${formatTokens(u.output_tokens)} out`
-})
-
-const costDisplay = computed(() => {
-  const u = usage.value
-  return u ? formatCost(u.cost_usd) : ''
+const subtaskTokens = computed(() => sub.value?.tokens ?? {
+  uncached: 0, cacheCreate: 0, cacheRead: 0, totalInput: 0, output: 0, cost: 0,
 })
 
 const turnsLabel = computed(() => {
@@ -174,7 +168,7 @@ const breadcrumbItems = computed(() => {
 
       <div class="stats">
         <Stat label="Elapsed" :value="elapsedDisplay" :sub="turnsLabel" />
-        <Stat label="Tokens" :value="tokensDisplay" :sub="costDisplay" />
+        <TokenCard label="Tokens" :bucket="subtaskTokens" />
         <Stat
           label="Issues"
           :value="issues.length"

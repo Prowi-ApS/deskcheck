@@ -7,6 +7,7 @@ import type { FindingSeverity } from '../types'
 import Crumb from '../components/Crumb.vue'
 import Meta from '../components/Meta.vue'
 import Stat from '../components/Stat.vue'
+import TokenCard from '../components/TokenCard.vue'
 import Collapse from '../components/Collapse.vue'
 import FilterChips, { type ChipOption } from '../components/FilterChips.vue'
 import IssuesTable from '../components/IssuesTable.vue'
@@ -52,23 +53,33 @@ const elapsedDisplay = computed(() => (elapsedMs.value > 0 ? formatDuration(elap
 const decision = computed(() => row.value?.decision ?? null)
 const matchedFiles = computed(() => decision.value?.matched_files ?? [])
 
-const partitionerStat = computed(() => {
+import type { TokenBucket } from '../composables/useRun'
+
+const partitionerTokens = computed<TokenBucket>(() => {
   const u = decision.value?.usage
-  if (!u) return { value: '—', sub: '' }
+  if (!u) return { uncached: 0, cacheCreate: 0, cacheRead: 0, totalInput: 0, output: 0, cost: 0 }
   return {
-    value: `${formatTokens(u.input_tokens)} in / ${formatTokens(u.output_tokens)} out`,
-    sub: formatCost(u.cost_usd),
+    uncached: u.input_tokens,
+    cacheCreate: u.cache_creation_tokens,
+    cacheRead: u.cache_read_tokens,
+    totalInput: u.input_tokens + u.cache_creation_tokens + u.cache_read_tokens,
+    output: u.output_tokens,
+    cost: u.cost_usd,
   }
 })
 
-const reviewersStat = computed(() => {
+const reviewerTokens = computed<TokenBucket>(() => {
   const r = row.value
-  if (!r) return { value: '—', sub: '' }
+  if (!r) return { uncached: 0, cacheCreate: 0, cacheRead: 0, totalInput: 0, output: 0, cost: 0 }
+  // Subtract the partitioner from the criterion total to get reviewers-only
+  const pt = partitionerTokens.value
   return {
-    value: `${formatTokens(r.totalInputTokens - (decision.value?.usage?.input_tokens ?? 0))} in / ${formatTokens(
-      r.totalOutputTokens - (decision.value?.usage?.output_tokens ?? 0),
-    )} out`,
-    sub: formatCost(r.totalCostUsd - (decision.value?.usage?.cost_usd ?? 0)),
+    uncached: r.tokens.uncached - pt.uncached,
+    cacheCreate: r.tokens.cacheCreate - pt.cacheCreate,
+    cacheRead: r.tokens.cacheRead - pt.cacheRead,
+    totalInput: r.tokens.totalInput - pt.totalInput,
+    output: r.tokens.output - pt.output,
+    cost: r.tokens.cost - pt.cost,
   }
 })
 
@@ -158,8 +169,8 @@ const partitionInstruction = computed(() => {
           :value="elapsedDisplay"
           :sub="`${completedReviewerCount}/${row.subtasks.length} subtasks done`"
         />
-        <Stat label="Partitioner" :value="partitionerStat.value" :sub="partitionerStat.sub" />
-        <Stat label="Reviewers" :value="reviewersStat.value" :sub="reviewersStat.sub" />
+        <TokenCard label="Partitioner" :bucket="partitionerTokens" />
+        <TokenCard label="Reviewers" :bucket="reviewerTokens" />
         <Stat
           label="Issues"
           :value="issuesForCriterion.length"

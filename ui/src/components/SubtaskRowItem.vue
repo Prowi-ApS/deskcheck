@@ -37,7 +37,7 @@ const meta = computed(() => {
     const word = sub.issueCount === 1 ? 'issue' : 'issues'
     parts.push(`${sub.issueCount} ${word}`)
   }
-  if (sub.inputTokens > 0) parts.push(`${formatTokens(sub.inputTokens)} tokens`)
+  if (sub.tokens.totalInput > 0) parts.push(`${formatTokens(sub.tokens.totalInput)} tokens`)
   if (sub.durationMs > 0) parts.push(formatDuration(sub.durationMs))
   return parts.join(' · ')
 })

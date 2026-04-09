@@ -13,7 +13,10 @@ const loading = ref(false)
 async function refresh(): Promise<void> {
   loading.value = true
   try {
-    runs.value = await listRuns()
+    const data = await listRuns()
+    // Sort newest first by planId (which is a timestamp string).
+    data.sort((a, b) => b.planId.localeCompare(a.planId))
+    runs.value = data
     error.value = null
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)

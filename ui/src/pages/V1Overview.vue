@@ -8,6 +8,7 @@ import Crumb from '../components/Crumb.vue'
 import Pipeline from '../components/Pipeline.vue'
 import Meta from '../components/Meta.vue'
 import Stat from '../components/Stat.vue'
+import TokenCard from '../components/TokenCard.vue'
 import StatusDot from '../components/StatusDot.vue'
 import Badge from '../components/Badge.vue'
 import ScopeBadge from '../components/ScopeBadge.vue'
@@ -71,7 +72,7 @@ const filesInDiff = computed(() => {
 
 const matchedCriteriaCount = computed(() => {
   const p = run.plan.value
-  return p ? Object.keys(p.partition_decisions).length : 0
+  return p ? Object.keys(p.modules).length : 0
 })
 
 const subtaskCount = computed(() => {
@@ -87,16 +88,22 @@ const completionLabel = computed(() => {
   return `${done}/${tasks.length} subtasks done`
 })
 
-const tokenStats = computed(() => {
+// Merged token bucket for the whole run (partition + review combined)
+const totalTokens = computed(() => {
   const b = run.tokenBreakdown.value
   return {
-    inputTotal: b.partition.input + b.review.input,
-    outputTotal: b.partition.output + b.review.output,
-    costTotal: b.partition.cost + b.review.cost,
-    inputBreakdown: `partition: ${formatTokens(b.partition.input)} · review: ${formatTokens(b.review.input)}`,
-    outputBreakdown: `partition: ${formatTokens(b.partition.output)} · review: ${formatTokens(b.review.output)}`,
-    costBreakdown: `partition: ${formatCost(b.partition.cost)} · review: ${formatCost(b.review.cost)}`,
+    uncached: b.partition.uncached + b.review.uncached,
+    cacheCreate: b.partition.cacheCreate + b.review.cacheCreate,
+    cacheRead: b.partition.cacheRead + b.review.cacheRead,
+    totalInput: b.partition.totalInput + b.review.totalInput,
+    output: b.partition.output + b.review.output,
+    cost: b.partition.cost + b.review.cost,
   }
+})
+
+const tokenBreakdownLabel = computed(() => {
+  const b = run.tokenBreakdown.value
+  return `partition: ${formatCost(b.partition.cost)} · review: ${formatCost(b.review.cost)}`
 })
 
 const elapsedDisplay = computed(() => {
@@ -183,20 +190,10 @@ const failureForCriterion = (reviewId: string): string | null => {
 
     <div class="stats">
       <Stat label="Elapsed" :value="elapsedDisplay" :sub="completionLabel" />
-      <Stat
-        label="Input tokens"
-        :value="formatTokens(tokenStats.inputTotal)"
-        :sub="tokenStats.inputBreakdown"
-      />
-      <Stat
-        label="Output tokens"
-        :value="formatTokens(tokenStats.outputTotal)"
-        :sub="tokenStats.outputBreakdown"
-      />
-      <Stat
-        label="Cost"
-        :value="formatCost(tokenStats.costTotal)"
-        :sub="tokenStats.costBreakdown"
+      <TokenCard
+        label="Tokens"
+        :bucket="totalTokens"
+        :breakdown="tokenBreakdownLabel"
       />
     </div>
 
@@ -215,8 +212,8 @@ const failureForCriterion = (reviewId: string): string | null => {
             {{ row.label }}
           </span>
           <span class="meta-cell">{{ row.totalDurationMs > 0 ? formatDuration(row.totalDurationMs) : '—' }}</span>
-          <span class="meta-cell">{{ formatTokens(row.totalInputTokens + row.totalOutputTokens) }} tokens</span>
-          <span class="meta-cell">{{ formatCost(row.totalCostUsd) }}</span>
+          <span class="meta-cell">{{ formatTokens(row.tokens.totalInput + row.tokens.output) }} tokens</span>
+          <span class="meta-cell">{{ formatCost(row.tokens.cost) }}</span>
           <span class="meta-cell">{{ row.subtasks.length }} subtasks</span>
           <Badge
             v-if="row.issueCount > 0"

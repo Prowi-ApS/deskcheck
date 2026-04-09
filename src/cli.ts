@@ -742,26 +742,48 @@ async function testCommand(
   console.log(`${DIM}  Discovered ${testCases.length} test case${testCases.length !== 1 ? "s" : ""} for ${uniqueCriteria.size} criteria${RESET}`);
   console.log("");
 
-  // Run tests with progress callback
+  // Run tests with live progress
   const runner = new TestRunnerService(config, projectRoot);
   let completed = 0;
+  const testTimers = new Map<string, number>();
 
   const run = await runner.run(testCases, storageDir, {
+    onTestStep: (criterionId: string, testName: string, step) => {
+      const key = `${criterionId}/${testName}`;
+      if (step === "executing") {
+        testTimers.set(key, Date.now());
+        process.stdout.write(`${DIM}  ◐ ${key} ${RESET}${DIM}reviewing...${RESET}`);
+      } else if (step === "judging") {
+        const startedAt = testTimers.get(key) ?? Date.now();
+        const reviewSec = ((Date.now() - startedAt) / 1000).toFixed(0);
+        // Clear the "reviewing..." line and show judging
+        process.stdout.write(`\r\x1b[K${DIM}  ◐ ${key} ${RESET}${DIM}reviewed in ${reviewSec}s, judging...${RESET}`);
+      }
+    },
     onTestComplete: (criterionId: string, testName: string, result: TestCaseResult) => {
       completed++;
+      const key = `${criterionId}/${testName}`;
+      const startedAt = testTimers.get(key) ?? Date.now();
+      const totalSec = ((Date.now() - startedAt) / 1000).toFixed(0);
       const isComplete = result.status === "complete";
       const isError = result.status === "error";
 
+      // Clear the in-progress line
+      process.stdout.write(`\r\x1b[K`);
+
       if (isError) {
-        console.log(`${RED}  \u2717 ${criterionId}/${testName}${RESET} ${DIM}(error)${RESET}`);
+        console.log(`${RED}  ✗ ${key}${RESET} ${DIM}(error, ${totalSec}s)${RESET}`);
       } else if (isComplete && result.scores) {
         const passing = result.scores.recall >= 0.8 && result.scores.precision >= 0.8 && result.scores.scope_compliance >= 0.8;
-        const icon = passing ? `${GREEN}\u2713` : `${YELLOW}\u25B2`;
+        const icon = passing ? `${GREEN}✓` : `${YELLOW}▲`;
         const recall = Math.round(result.scores.recall * 100);
         const precision = Math.round(result.scores.precision * 100);
-        console.log(`${icon} ${criterionId}/${testName}${RESET} ${DIM}(recall: ${recall}%, precision: ${precision}%)${RESET}`);
+        const costStr = result.executor_usage?.cost_usd != null
+          ? ` · $${(result.executor_usage.cost_usd + (result.judge_usage?.cost_usd ?? 0)).toFixed(3)}`
+          : "";
+        console.log(`${icon} ${key}${RESET} ${DIM}(recall: ${recall}%, precision: ${precision}% · ${totalSec}s${costStr})${RESET}`);
       } else {
-        console.log(`${DIM}  \u25CB ${criterionId}/${testName} (${result.status})${RESET}`);
+        console.log(`${DIM}  ○ ${key} (${result.status}, ${totalSec}s)${RESET}`);
       }
     },
   });
@@ -781,7 +803,7 @@ const program = new Command();
 program
   .name("deskcheck")
   .description("Modular code deskcheck tool powered by Claude")
-  .version("0.4.1");
+  .version("0.4.2");
 
 // Default command: natural language deskcheck
 program

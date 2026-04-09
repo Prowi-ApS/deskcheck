@@ -15,8 +15,13 @@ import { calculateScores } from "./TestScorerService.js";
 // Types
 // =============================================================================
 
+/** Step within a single test case's execution. */
+export type TestStep = "executing" | "judging";
+
 /** Options for controlling test run behavior. */
 export interface TestRunOptions {
+  /** Called when a test case moves to a new step (executing, judging). */
+  onTestStep?: (criterionId: string, testName: string, step: TestStep) => void;
   /** Called after each test case completes (or errors), for live progress reporting. */
   onTestComplete?: (criterionId: string, testName: string, result: TestCaseResult) => void;
 }
@@ -81,6 +86,7 @@ export class TestRunnerService {
           storage,
           executorService,
           judgeService,
+          options,
         );
       } catch (error) {
         // Catch unexpected errors and record them
@@ -121,11 +127,13 @@ export class TestRunnerService {
     storage: TestStorageService,
     executorService: ExecutorService,
     judgeService: JudgeService,
+    options?: TestRunOptions,
   ): Promise<void> {
     // Step 1: Update status to "executing"
     storage.updateTestCase(runId, testCase.criterionId, testCase.name, {
       status: "executing",
     });
+    options?.onTestStep?.(testCase.criterionId, testCase.name, "executing");
 
     // Step 2: Parse the criterion
     // criterionFile is relative to the parent of the criteria dir (e.g. "criteria/backend/controller-conventions.md")
@@ -168,6 +176,7 @@ export class TestRunnerService {
       findings,
       executor_usage: executorResult.usage,
     });
+    options?.onTestStep?.(testCase.criterionId, testCase.name, "judging");
 
     // Step 8: Read expected.md
     const expectedContent = fs.readFileSync(testCase.expectedFile, "utf-8");

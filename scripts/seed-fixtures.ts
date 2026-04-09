@@ -102,12 +102,26 @@ function writeInitialPlan(shell: PlanShell): void {
   );
 }
 
-function makeUsage(input: number, output: number, costUsd: number, durationMs: number, model: string, numTurns: number): TaskUsage {
+/**
+ * Build a realistic TaskUsage. The first call for a given criterion pays cache
+ * creation cost (large cacheCreate, no cacheRead). Subsequent calls get cache
+ * hits (large cacheRead, no cacheCreate). This makes the TokenCard's cache %
+ * render realistically in the seeded fixtures.
+ */
+function makeUsage(
+  input: number,
+  output: number,
+  costUsd: number,
+  durationMs: number,
+  model: string,
+  numTurns: number,
+  opts?: { cacheRead?: number; cacheCreate?: number },
+): TaskUsage {
   return {
     input_tokens: input,
     output_tokens: output,
-    cache_read_tokens: 0,
-    cache_creation_tokens: 0,
+    cache_read_tokens: opts?.cacheRead ?? 0,
+    cache_creation_tokens: opts?.cacheCreate ?? 0,
     cost_usd: costUsd,
     duration_ms: durationMs,
     duration_api_ms: Math.round(durationMs * 0.85),
@@ -360,7 +374,7 @@ function seedCompleteWithIssues(): void {
   // -- Complete each task with realistic usage and findings --
   const taskOrder = Object.keys(storage.getPlan(planId).tasks);
 
-  // error-handling-001 → calculateCommission, 1 critical issue
+  // error-handling-001 → calculateCommission, 1 critical issue (first task: pays cache creation)
   completeTaskFixture(
     planId,
     taskOrder[0]!,
@@ -369,14 +383,14 @@ function seedCompleteWithIssues(): void {
         ref("src/Services/CommissionService.php", 142, "return null;", "throw new MissingCommissionModelException($plan);", "Silent failure"),
       ]),
     ],
-    makeUsage(18_200, 3_400, 0.04, 22_000, "sonnet", 6),
+    makeUsage(5, 3_400, 0.04, 22_000, "sonnet", 6, { cacheCreate: 42_000, cacheRead: 0 }),
   );
 
-  // error-handling-002 → applyTiers, clean
-  completeTaskFixture(planId, taskOrder[1]!, [], makeUsage(15_600, 2_100, 0.03, 18_000, "sonnet", 5));
+  // error-handling-002 → applyTiers, clean (subsequent: cache read)
+  completeTaskFixture(planId, taskOrder[1]!, [], makeUsage(4, 2_100, 0.02, 18_000, "sonnet", 5, { cacheCreate: 0, cacheRead: 42_000 }));
 
   // error-handling-003 → resolveOverrides, clean
-  completeTaskFixture(planId, taskOrder[2]!, [], makeUsage(14_200, 1_800, 0.03, 16_000, "sonnet", 5));
+  completeTaskFixture(planId, taskOrder[2]!, [], makeUsage(4, 1_800, 0.02, 16_000, "sonnet", 5, { cacheCreate: 0, cacheRead: 42_000 }));
 
   // error-handling-004 → handleCorrections, 1 warning
   completeTaskFixture(
@@ -387,16 +401,16 @@ function seedCompleteWithIssues(): void {
         ref("src/Services/CommissionService.php", 287, null, null, null),
       ]),
     ],
-    makeUsage(16_800, 2_800, 0.03, 20_000, "sonnet", 5),
+    makeUsage(4, 2_800, 0.02, 20_000, "sonnet", 5, { cacheCreate: 0, cacheRead: 42_000 }),
   );
 
   // error-handling-005 → KpiCalculator, clean
-  completeTaskFixture(planId, taskOrder[4]!, [], makeUsage(11_200, 1_200, 0.02, 12_000, "sonnet", 4));
+  completeTaskFixture(planId, taskOrder[4]!, [], makeUsage(4, 1_200, 0.01, 12_000, "sonnet", 4, { cacheCreate: 0, cacheRead: 42_000 }));
 
   // error-handling-006 → ApprovalService, clean
-  completeTaskFixture(planId, taskOrder[5]!, [], makeUsage(13_400, 1_600, 0.02, 14_000, "sonnet", 4));
+  completeTaskFixture(planId, taskOrder[5]!, [], makeUsage(4, 1_600, 0.01, 14_000, "sonnet", 4, { cacheCreate: 0, cacheRead: 42_000 }));
 
-  // security-001 → CommissionController, 1 warning + 1 info
+  // security-001 → CommissionController, 1 warning + 1 info (first security task: cache creation)
   completeTaskFixture(
     planId,
     taskOrder[6]!,
@@ -408,13 +422,13 @@ function seedCompleteWithIssues(): void {
         ref("src/Controllers/CommissionController.php", 22, null, null, null),
       ]),
     ],
-    makeUsage(19_800, 4_200, 0.05, 25_000, "sonnet", 7),
+    makeUsage(5, 4_200, 0.05, 25_000, "sonnet", 7, { cacheCreate: 38_000, cacheRead: 0 }),
   );
 
-  // security-002 → ApprovalService, clean
-  completeTaskFixture(planId, taskOrder[7]!, [], makeUsage(14_600, 2_000, 0.03, 17_000, "sonnet", 5));
+  // security-002 → ApprovalService, clean (cache read)
+  completeTaskFixture(planId, taskOrder[7]!, [], makeUsage(4, 2_000, 0.02, 17_000, "sonnet", 5, { cacheCreate: 0, cacheRead: 38_000 }));
 
-  // test-coverage-001 → multi-reference issue
+  // test-coverage-001 → multi-reference issue (first test-coverage task: cache creation)
   completeTaskFixture(
     planId,
     taskOrder[8]!,
@@ -424,7 +438,7 @@ function seedCompleteWithIssues(): void {
         ref("src/Services/CommissionService.php", 260, null, null, "Method definition under test"),
       ]),
     ],
-    makeUsage(22_400, 3_800, 0.05, 28_000, "sonnet", 8),
+    makeUsage(5, 3_800, 0.04, 28_000, "sonnet", 8, { cacheCreate: 35_000, cacheRead: 0 }),
   );
 }
 

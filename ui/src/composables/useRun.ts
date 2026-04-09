@@ -87,9 +87,7 @@ export interface CriterionRow {
   decision: PartitionDecision | null
   subtasks: SubtaskRow[]
   totalDurationMs: number
-  totalInputTokens: number
-  totalOutputTokens: number
-  totalCostUsd: number
+  tokens: TokenBucket
   issueCount: number
 }
 
@@ -102,9 +100,7 @@ export interface SubtaskRow {
   status: CriterionStatus
   taskStatus: ReviewTask['status']
   durationMs: number
-  inputTokens: number
-  outputTokens: number
-  costUsd: number
+  tokens: TokenBucket
   issueCount: number
   error: string | null
   task: ReviewTask
@@ -129,21 +125,41 @@ function rollupCriterionStatus(rows: SubtaskRow[]): CriterionStatus {
 // Token breakdown
 // =============================================================================
 
+/**
+ * Full token usage breakdown for a pipeline segment (partition or review).
+ *
+ * The Anthropic API splits input tokens into three buckets:
+ * - `uncached`: fresh tokens (new user message, uncached prompt parts) — standard rate
+ * - `cacheCreate`: first-time cache writes (system prompt, tools) — 1.25x rate
+ * - `cacheRead`: cache hits on subsequent requests — 0.1x rate
+ *
+ * `totalInput` = uncached + cacheCreate + cacheRead — this is the total tokens
+ * the model actually processed on the input side.
+ */
+export interface TokenBucket {
+  uncached: number
+  cacheCreate: number
+  cacheRead: number
+  totalInput: number
+  output: number
+  cost: number
+}
+
 export interface TokenBreakdown {
-  partition: { input: number; output: number; cost: number }
-  review: { input: number; output: number; cost: number }
+  partition: TokenBucket
+  review: TokenBucket
 }
 
-function emptyUsage(): { input: number; output: number; cost: number } {
-  return { input: 0, output: 0, cost: 0 }
+function emptyBucket(): TokenBucket {
+  return { uncached: 0, cacheCreate: 0, cacheRead: 0, totalInput: 0, output: 0, cost: 0 }
 }
 
-function addUsage(
-  acc: { input: number; output: number; cost: number },
-  u: TaskUsage | null,
-): void {
+function addUsage(acc: TokenBucket, u: TaskUsage | null): void {
   if (!u) return
-  acc.input += u.input_tokens
+  acc.uncached += u.input_tokens
+  acc.cacheCreate += u.cache_creation_tokens
+  acc.cacheRead += u.cache_read_tokens
+  acc.totalInput += u.input_tokens + u.cache_creation_tokens + u.cache_read_tokens
   acc.output += u.output_tokens
   acc.cost += u.cost_usd
 }
@@ -202,7 +218,12 @@ export function useRun(planId: string): UseRun {
     const p = plan.value
     if (!p) return []
     const r = results.value
-    const reviewIds = Object.keys(p.partition_decisions).sort()
+    // Derive from plan.modules (available right after matching, before
+    // partitioning starts) rather than partition_decisions (only populated
+    // as each partitioner finishes). This makes criteria visible in V1
+    // immediately — they show a "partitioning..." state until their
+    // decision lands.
+    const reviewIds = Object.keys(p.modules).sort()
 
     return reviewIds.map((reviewId) => {
       const decision = p.partition_decisions[reviewId] ?? null
@@ -214,6 +235,8 @@ export function useRun(planId: string): UseRun {
         const taskResult = r?.task_results[task.task_id]
         const issueCount = taskResult?.issues.length ?? 0
         const usage = taskResult?.usage ?? null
+        const bucket = emptyBucket()
+        addUsage(bucket, usage)
         return {
           task_id: task.task_id,
           review_id: task.review_id,
@@ -223,36 +246,45 @@ export function useRun(planId: string): UseRun {
           status: statusForTask(task, issueCount),
           taskStatus: task.status,
           durationMs: usage?.duration_ms ?? 0,
-          inputTokens: usage?.input_tokens ?? 0,
-          outputTokens: usage?.output_tokens ?? 0,
-          costUsd: usage?.cost_usd ?? 0,
+          tokens: bucket,
           issueCount,
           error: task.error,
           task,
         }
       })
 
-      const partitionerDuration = decision?.usage?.duration_ms ?? 0
-      const partitionerInput = decision?.usage?.input_tokens ?? 0
-      const partitionerOutput = decision?.usage?.output_tokens ?? 0
-      const partitionerCost = decision?.usage?.cost_usd ?? 0
+      // Aggregate: partitioner + all reviewer subtasks
+      const tokens = emptyBucket()
+      addUsage(tokens, decision?.usage ?? null)
+      for (const st of subtasks) {
+        tokens.uncached += st.tokens.uncached
+        tokens.cacheCreate += st.tokens.cacheCreate
+        tokens.cacheRead += st.tokens.cacheRead
+        tokens.totalInput += st.tokens.totalInput
+        tokens.output += st.tokens.output
+        tokens.cost += st.tokens.cost
+      }
 
+      const partitionerDuration = decision?.usage?.duration_ms ?? 0
       const reviewerDuration = subtasks.reduce((s, t) => s + t.durationMs, 0)
-      const reviewerInput = subtasks.reduce((s, t) => s + t.inputTokens, 0)
-      const reviewerOutput = subtasks.reduce((s, t) => s + t.outputTokens, 0)
-      const reviewerCost = subtasks.reduce((s, t) => s + t.costUsd, 0)
       const issueCount = subtasks.reduce((s, t) => s + t.issueCount, 0)
+
+      // If no decision exists yet, this criterion is still being partitioned.
+      // If a decision exists but no tasks, the build-step hasn't materialized
+      // them yet. Either way, show as "pending" rather than "clean".
+      const status =
+        subtasks.length === 0
+          ? (decision ? 'pending' : 'in_progress')
+          : rollupCriterionStatus(subtasks)
 
       return {
         review_id: reviewId,
         label: reviewId.split('/').pop() ?? reviewId,
-        status: rollupCriterionStatus(subtasks),
+        status: status as CriterionStatus,
         decision,
         subtasks,
         totalDurationMs: partitionerDuration + reviewerDuration,
-        totalInputTokens: partitionerInput + reviewerInput,
-        totalOutputTokens: partitionerOutput + reviewerOutput,
-        totalCostUsd: partitionerCost + reviewerCost,
+        tokens,
         issueCount,
       }
     })
@@ -260,8 +292,8 @@ export function useRun(planId: string): UseRun {
 
   const tokenBreakdown = computed<TokenBreakdown>(() => {
     const breakdown: TokenBreakdown = {
-      partition: emptyUsage(),
-      review: emptyUsage(),
+      partition: emptyBucket(),
+      review: emptyBucket(),
     }
     const p = plan.value
     if (!p) return breakdown
