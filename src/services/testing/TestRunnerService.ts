@@ -20,6 +20,8 @@ export type TestStep = "executing" | "judging";
 
 /** Options for controlling test run behavior. */
 export interface TestRunOptions {
+  /** Max concurrent test cases. Defaults to 5. */
+  concurrency?: number;
   /** Called when a test case moves to a new step (executing, judging). */
   onTestStep?: (criterionId: string, testName: string, step: TestStep) => void;
   /** Called after each test case completes (or errors), for live progress reporting. */
@@ -51,6 +53,10 @@ export class TestRunnerService {
   /**
    * Run all test cases and return the completed test run.
    *
+   * Uses a concurrency pool (default 5) so multiple test cases execute in
+   * parallel. Tests within the same criterion share the Agent SDK prompt
+   * cache, so they benefit from running close together in time.
+   *
    * @param testCases - Discovered test cases to execute.
    * @param storageDir - Directory where test run results are persisted.
    * @param options - Optional callbacks for progress reporting.
@@ -64,6 +70,7 @@ export class TestRunnerService {
     const storage = new TestStorageService(storageDir);
     const executorService = new ExecutorService(this.config, this.projectRoot);
     const judgeService = new JudgeService(this.config, this.projectRoot);
+    const maxConcurrent = options?.concurrency ?? 5;
 
     // Initialize the run with all tests as "pending"
     const run = storage.createRun(testCases);
@@ -72,7 +79,8 @@ export class TestRunnerService {
     // Track which suites have been started
     const startedSuites = new Set<string>();
 
-    for (const testCase of testCases) {
+    /** Run a single test case end-to-end and notify callbacks. */
+    const runOne = async (testCase: TestCase): Promise<void> => {
       // Mark suite as running if not yet started
       if (!startedSuites.has(testCase.criterionId)) {
         storage.updateSuiteStatus(runId, testCase.criterionId, "running");
@@ -89,7 +97,6 @@ export class TestRunnerService {
           options,
         );
       } catch (error) {
-        // Catch unexpected errors and record them
         const errorMessage = error instanceof Error ? error.message : String(error);
         storage.updateTestCase(runId, testCase.criterionId, testCase.name, {
           status: "error",
@@ -97,13 +104,36 @@ export class TestRunnerService {
         });
       }
 
-      // Notify caller of test completion (whether success or error)
+      // Notify caller of test completion
       if (options?.onTestComplete) {
         const currentRun = storage.getRun(runId);
         const result = currentRun.suites[testCase.criterionId]?.tests[testCase.name];
         if (result) {
           options.onTestComplete(testCase.criterionId, testCase.name, result);
         }
+      }
+    };
+
+    // Concurrency pool
+    const pool: Promise<void>[] = [];
+    let idx = 0;
+
+    // Fill initial batch
+    while (idx < testCases.length && pool.length < maxConcurrent) {
+      const tc = testCases[idx]!;
+      idx++;
+      const p = runOne(tc).then(() => { pool.splice(pool.indexOf(p), 1); });
+      pool.push(p);
+    }
+
+    // As slots free up, start more
+    while (pool.length > 0) {
+      await Promise.race(pool);
+      while (idx < testCases.length && pool.length < maxConcurrent) {
+        const tc = testCases[idx]!;
+        idx++;
+        const p = runOne(tc).then(() => { pool.splice(pool.indexOf(p), 1); });
+        pool.push(p);
       }
     }
 

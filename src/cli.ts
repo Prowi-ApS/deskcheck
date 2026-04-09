@@ -742,22 +742,23 @@ async function testCommand(
   console.log(`${DIM}  Discovered ${testCases.length} test case${testCases.length !== 1 ? "s" : ""} for ${uniqueCriteria.size} criteria${RESET}`);
   console.log("");
 
-  // Run tests with live progress
+  // Run tests with live progress (concurrent)
   const runner = new TestRunnerService(config, projectRoot);
   let completed = 0;
+  const total = testCases.length;
   const testTimers = new Map<string, number>();
 
   const run = await runner.run(testCases, storageDir, {
+    concurrency: config.concurrency,
     onTestStep: (criterionId: string, testName: string, step) => {
       const key = `${criterionId}/${testName}`;
       if (step === "executing") {
         testTimers.set(key, Date.now());
-        process.stdout.write(`${DIM}  ◐ ${key} ${RESET}${DIM}reviewing...${RESET}`);
+        console.log(`${DIM}  ◐ ${key} reviewing...${RESET}`);
       } else if (step === "judging") {
         const startedAt = testTimers.get(key) ?? Date.now();
         const reviewSec = ((Date.now() - startedAt) / 1000).toFixed(0);
-        // Clear the "reviewing..." line and show judging
-        process.stdout.write(`\r\x1b[K${DIM}  ◐ ${key} ${RESET}${DIM}reviewed in ${reviewSec}s, judging...${RESET}`);
+        console.log(`${DIM}  ◐ ${key} reviewed in ${reviewSec}s, judging...${RESET}`);
       }
     },
     onTestComplete: (criterionId: string, testName: string, result: TestCaseResult) => {
@@ -767,12 +768,10 @@ async function testCommand(
       const totalSec = ((Date.now() - startedAt) / 1000).toFixed(0);
       const isComplete = result.status === "complete";
       const isError = result.status === "error";
-
-      // Clear the in-progress line
-      process.stdout.write(`\r\x1b[K`);
+      const progress = `[${completed}/${total}]`;
 
       if (isError) {
-        console.log(`${RED}  ✗ ${key}${RESET} ${DIM}(error, ${totalSec}s)${RESET}`);
+        console.log(`${RED}  ✗ ${key}${RESET} ${DIM}(error, ${totalSec}s) ${progress}${RESET}`);
       } else if (isComplete && result.scores) {
         const passing = result.scores.recall >= 0.8 && result.scores.precision >= 0.8 && result.scores.scope_compliance >= 0.8;
         const icon = passing ? `${GREEN}✓` : `${YELLOW}▲`;
@@ -781,9 +780,9 @@ async function testCommand(
         const costStr = result.executor_usage?.cost_usd != null
           ? ` · $${(result.executor_usage.cost_usd + (result.judge_usage?.cost_usd ?? 0)).toFixed(3)}`
           : "";
-        console.log(`${icon} ${key}${RESET} ${DIM}(recall: ${recall}%, precision: ${precision}% · ${totalSec}s${costStr})${RESET}`);
+        console.log(`${icon} ${key}${RESET} ${DIM}(recall: ${recall}%, precision: ${precision}% · ${totalSec}s${costStr}) ${progress}${RESET}`);
       } else {
-        console.log(`${DIM}  ○ ${key} (${result.status}, ${totalSec}s)${RESET}`);
+        console.log(`${DIM}  ○ ${key} (${result.status}, ${totalSec}s) ${progress}${RESET}`);
       }
     },
   });
@@ -803,7 +802,7 @@ const program = new Command();
 program
   .name("deskcheck")
   .description("Modular code deskcheck tool powered by Claude")
-  .version("0.4.2");
+  .version("0.4.3");
 
 // Default command: natural language deskcheck
 program
