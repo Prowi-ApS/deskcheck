@@ -34,6 +34,17 @@ export interface ReviewConfig {
   tests_dir: string;
   /** Port for the web UI server. Default: 3000. */
   serve_port: number;
+  /** Max concurrent reviewer agents. Default: 5. */
+  concurrency: number;
+  /**
+   * Default Claude model used across the pipeline. Applied to:
+   * - Criterion `model` when not specified in frontmatter
+   * - Resolver agent (unless `agents.resolver.model` overrides)
+   * - Partitioner agent (unless `agents.partitioner.model` overrides)
+   *
+   * Individual agents and criteria can always override this.
+   */
+  defaultModel: AgentModel;
   /** Shared configuration applied to all agent roles. */
   shared: {
     /** Tools available to all agents. */
@@ -45,7 +56,7 @@ export interface ReviewConfig {
   agents: {
     resolver: AgentRoleConfig;
     partitioner: AgentRoleConfig;
-    executor: AgentRoleConfig;
+    reviewer: AgentRoleConfig;
     evaluator: AgentRoleConfig;
     judge: AgentRoleConfig;
   };

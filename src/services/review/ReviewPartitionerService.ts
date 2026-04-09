@@ -154,7 +154,7 @@ export class ReviewPartitionerService {
       ],
     });
 
-    const partitionerModel = this.config.agents.partitioner.model ?? "haiku";
+    const partitionerModel = this.config.agents.partitioner.model ?? this.config.defaultModel;
     const systemPrompt = buildPartitionerPrompt(criterion, matchedFiles, scope);
 
     const abortController = new AbortController();

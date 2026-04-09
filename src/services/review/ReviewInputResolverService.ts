@@ -87,7 +87,7 @@ export class ReviewInputResolverService {
       ],
     });
 
-    const resolverModel = this.config.agents.resolver.model ?? "haiku";
+    const resolverModel = this.config.agents.resolver.model ?? this.config.defaultModel;
     const systemPrompt =
       buildResolverPrompt() +
       (scopeOverride

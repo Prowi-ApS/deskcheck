@@ -96,7 +96,7 @@ export function registerReviewTools(
     },
   }, ({ files }) => {
     try {
-      const modules = discoverModules(modulesDir);
+      const modules = discoverModules(modulesDir, config.defaultModel);
       const matches = findMatchingModules(files, modules);
 
       const result = matches.map((match) => ({

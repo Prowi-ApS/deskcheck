@@ -10,7 +10,7 @@ const VALID_MODELS: ReadonlySet<string> = new Set<AgentModel>([
 ]);
 
 const DEFAULT_PARTITION = "one task per matched file";
-const DEFAULT_MODEL: AgentModel = "haiku";
+const FALLBACK_MODEL: AgentModel = "sonnet";
 
 /**
  * Parse a single criterion markdown file into a ReviewModule object.
@@ -21,10 +21,11 @@ const DEFAULT_MODEL: AgentModel = "haiku";
  *
  * @param filePath - Absolute or relative path to the markdown file.
  * @param basePath - Base directory used to compute relative paths and criterion IDs.
+ * @param defaultModel - Model to use when the criterion doesn't specify one. Falls back to "sonnet" if not provided.
  * @returns Parsed ReviewModule.
  * @throws {Error} If the file cannot be read or frontmatter is invalid.
  */
-export function parseModule(filePath: string, basePath: string): ReviewModule {
+export function parseModule(filePath: string, basePath: string, defaultModel?: AgentModel): ReviewModule {
   const absolutePath = path.resolve(filePath);
   const absoluteBase = path.resolve(basePath);
 
@@ -63,7 +64,7 @@ export function parseModule(filePath: string, basePath: string): ReviewModule {
       ? frontmatter.partition
       : DEFAULT_PARTITION;
 
-  const model = frontmatter.model ?? DEFAULT_MODEL;
+  const model = frontmatter.model ?? defaultModel ?? FALLBACK_MODEL;
   if (!VALID_MODELS.has(model)) {
     throw new Error(
       `Invalid criterion ${relativePath}: "model" must be one of: ${[...VALID_MODELS].join(", ")}. Got: ${JSON.stringify(model)}`,
@@ -111,10 +112,11 @@ export function parseModule(filePath: string, basePath: string): ReviewModule {
  * (description, globs, etc.) and the markdown body becomes the detective prompt.
  *
  * @param modulesDir - Path to the directory containing criterion markdown files.
+ * @param defaultModel - Model to use for criteria that don't specify one in frontmatter.
  * @returns Array of parsed ReviewModule objects, sorted by ID for deterministic ordering.
  * @throws {Error} If the directory does not exist or any criterion file has invalid frontmatter.
  */
-export function discoverModules(modulesDir: string): ReviewModule[] {
+export function discoverModules(modulesDir: string, defaultModel?: AgentModel): ReviewModule[] {
   const absoluteDir = path.resolve(modulesDir);
 
   if (!fs.existsSync(absoluteDir)) {
@@ -131,7 +133,7 @@ export function discoverModules(modulesDir: string): ReviewModule[] {
 
   for (const relativeFile of mdFiles) {
     const absoluteFile = path.join(absoluteDir, relativeFile);
-    modules.push(parseModule(absoluteFile, absoluteDir));
+    modules.push(parseModule(absoluteFile, absoluteDir, defaultModel));
   }
 
   return modules.sort((a, b) => a.id.localeCompare(b.id));

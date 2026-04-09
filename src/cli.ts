@@ -96,11 +96,12 @@ function renderOutput(results: ReviewResults, plan: ReviewPlan, format: string):
 async function executeAndPrint(
   orchestrator: ReviewOrchestratorService,
   planId: string,
+  maxConcurrent?: number,
 ): Promise<void> {
   console.log(`${DIM}  Checking...${RESET}`);
   console.log("");
 
-  for await (const event of orchestrator.execute(planId)) {
+  for await (const event of orchestrator.execute(planId, { maxConcurrent })) {
     switch (event.type) {
       case "task_started":
         break;
@@ -155,35 +156,212 @@ function initCommand(): void {
   const deskchecDir = path.join(projectRoot, ".deskcheck");
   const configPath = path.join(deskchecDir, "config.json");
   const modulesDir = path.join(projectRoot, "deskcheck", "criteria");
+  const exampleCriterion = path.join(modulesDir, "example.md");
 
   let created = false;
 
   if (!fs.existsSync(deskchecDir)) {
     fs.mkdirSync(deskchecDir, { recursive: true });
-    console.log(`Created ${deskchecDir}/`);
+    console.log(`  Created ${DIM}.deskcheck/${RESET}`);
     created = true;
   }
 
   if (!fs.existsSync(configPath)) {
-    fs.writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n");
-    console.log(`Created ${configPath}`);
+    fs.writeFileSync(configPath, ANNOTATED_CONFIG);
+    console.log(`  Created ${DIM}.deskcheck/config.json${RESET}`);
     created = true;
   } else {
-    console.log(`Config already exists: ${configPath}`);
+    console.log(`  Config already exists: ${DIM}.deskcheck/config.json${RESET}`);
   }
 
   if (!fs.existsSync(modulesDir)) {
     fs.mkdirSync(modulesDir, { recursive: true });
-    console.log(`Created ${modulesDir}/`);
+    console.log(`  Created ${DIM}deskcheck/criteria/${RESET}`);
     created = true;
   } else {
-    console.log(`Criteria directory already exists: ${modulesDir}/`);
+    console.log(`  Criteria directory already exists: ${DIM}deskcheck/criteria/${RESET}`);
+  }
+
+  if (!fs.existsSync(exampleCriterion)) {
+    fs.writeFileSync(exampleCriterion, EXAMPLE_CRITERION);
+    console.log(`  Created ${DIM}deskcheck/criteria/example.md${RESET}`);
+    created = true;
   }
 
   if (!created) {
     console.log("Already initialized — nothing to do.");
+    return;
+  }
+
+  console.log("");
+  console.log(`${BOLD}  Next steps:${RESET}`);
+  console.log(`${DIM}  1. Edit deskcheck/criteria/example.md (or create your own criterion files)${RESET}`);
+  console.log(`${DIM}  2. Run: deskcheck diff main${RESET}`);
+  console.log(`${DIM}  3. View results: deskcheck serve${RESET}`);
+  console.log("");
+  console.log(`${DIM}  Run ${BOLD}deskcheck init --explain${RESET}${DIM} to see all config options.${RESET}`);
+}
+
+/** `deskcheck init --explain` — print a detailed reference of all config options. */
+function explainConfig(): void {
+  console.log(`
+${BOLD}Deskcheck Configuration Reference${RESET}
+${DIM}Config file: .deskcheck/config.json${RESET}
+
+${BOLD}Top-level fields:${RESET}
+
+  ${GREEN}modules_dir${RESET}     ${DIM}(string, default: "deskcheck/criteria")${RESET}
+    Directory containing criterion markdown files. Scanned recursively.
+
+  ${GREEN}storage_dir${RESET}     ${DIM}(string, default: ".deskcheck/runs")${RESET}
+    Where run data (plan.json, results.json, agent logs) is stored.
+
+  ${GREEN}tests_dir${RESET}       ${DIM}(string, default: "deskcheck/tests")${RESET}
+    Directory for criterion test fixtures (used by \`deskcheck test\`).
+
+  ${GREEN}serve_port${RESET}      ${DIM}(number, default: 3000)${RESET}
+    Port for the web dashboard (\`deskcheck serve\`).
+
+  ${GREEN}concurrency${RESET}     ${DIM}(number, default: 5)${RESET}
+    Max concurrent reviewer agents. CLI flag --concurrency overrides this.
+
+  ${GREEN}defaultModel${RESET}    ${DIM}(string, default: "sonnet")${RESET}
+    Default Claude model for the pipeline. Used by:
+    - Criterion \`model\` when not specified in frontmatter
+    - Resolver agent (unless agents.resolver.model overrides)
+    - Partitioner agent (unless agents.partitioner.model overrides)
+    Values: "haiku", "sonnet", "opus"
+
+${BOLD}shared:${RESET} ${DIM}— configuration shared across all agent roles${RESET}
+
+  ${GREEN}shared.allowed_tools${RESET}   ${DIM}(string[], default: ["Read", "Glob", "Grep"])${RESET}
+    Tools available to reviewer agents on top of built-ins.
+    Built-in tools (Read, Grep, Glob, Bash) are ALWAYS available
+    regardless of this setting. Add extras here like "WebFetch".
+
+  ${GREEN}shared.mcp_servers${RESET}    ${DIM}(object, default: {})${RESET}
+    MCP servers available to all reviewer agents.
+    Each entry: { "name": { "command": "...", "args": [...], "env": {...} } }
+    ${YELLOW}Note: deskcheck never inherits MCP servers from your Claude Code
+    config. Only servers listed here (or per-role) are available.${RESET}
+
+${BOLD}agents:${RESET} ${DIM}— per-role agent configuration${RESET}
+
+  Each role has the same shape: { model?, additional_tools?, additional_mcp_servers? }
+
+  ${GREEN}agents.resolver${RESET}      ${DIM}(default model: from defaultModel)${RESET}
+    The natural-language input resolver. Only used by \`deskcheck "<prompt>"\`.
+    Resolves the user's request into { scope, files }. Gets built-in tools only.
+    Set \`"model"\` to override defaultModel for this role only.
+
+  ${GREEN}agents.partitioner${RESET}  ${DIM}(default model: from defaultModel)${RESET}
+    Splits matched files into subtasks per criterion. One agent per criterion.
+    Gets built-in tools only. additional_tools/additional_mcp_servers are ignored.
+    Set \`"model"\` to override defaultModel for this role only.
+
+  ${GREEN}agents.reviewer${RESET}     ${DIM}(default model: per-criterion frontmatter, falls back to defaultModel)${RESET}
+    The reviewer agents. Model comes from the criterion's \`model:\` field.
+    If the criterion doesn't specify a model, \`defaultModel\` is used.
+    Use this to add tools/MCP servers to all reviewers:
+      "reviewer": {
+        "additional_tools": ["WebFetch"],
+        "additional_mcp_servers": {
+          "my-db": { "command": "npx", "args": ["@my/db-mcp"] }
+        }
+      }
+
+  ${GREEN}agents.evaluator${RESET}    ${DIM}(default model: "haiku")${RESET}
+    Used by \`deskcheck test\` to run criteria against fixture files.
+
+  ${GREEN}agents.judge${RESET}        ${DIM}(default model: "opus")${RESET}
+    Used by \`deskcheck test\` to score findings against expectations.
+
+${BOLD}Criterion frontmatter fields:${RESET}
+
+  ${GREEN}description${RESET}   ${DIM}(required)${RESET}  Human-readable description
+  ${GREEN}globs${RESET}         ${DIM}(required)${RESET}  File patterns to match. Prefix with ! to exclude.
+  ${GREEN}partition${RESET}     ${DIM}(optional, default: "one task per matched file")${RESET}
+                Natural-language instruction for how to split files into subtasks.
+                Examples: "one task per file", "one public method per task",
+                          "group each test with its source file"
+  ${GREEN}model${RESET}         ${DIM}(optional, default: "haiku")${RESET}
+                Claude model for reviewer agents: haiku, sonnet, opus.
+                ${YELLOW}Use sonnet if the criterion has "What NOT to check" rules.${RESET}
+  ${GREEN}tools${RESET}         ${DIM}(optional, default: [])${RESET}
+                Extra tools for reviewers running this criterion.
+                Layered on top of built-ins + shared + executor tools.
+
+${BOLD}Example config:${RESET}
+
+  {
+    "modules_dir": "deskcheck/criteria",
+    "storage_dir": ".deskcheck/runs",
+    "serve_port": 3000,
+    "concurrency": 5,
+    "defaultModel": "sonnet",
+    "shared": {
+      "allowed_tools": ["Read", "Glob", "Grep"],
+      "mcp_servers": {}
+    },
+    "agents": {
+      "resolver": {},
+      "partitioner": {},
+      "reviewer": {},
+      "evaluator": { "model": "haiku" },
+      "judge": { "model": "opus" }
+    }
+  }
+`);
+}
+
+// =============================================================================
+// Init templates
+// =============================================================================
+
+const ANNOTATED_CONFIG = `{
+  "modules_dir": "deskcheck/criteria",
+  "storage_dir": ".deskcheck/runs",
+  "tests_dir": "deskcheck/tests",
+  "serve_port": 3000,
+  "concurrency": 5,
+  "defaultModel": "sonnet",
+  "shared": {
+    "allowed_tools": ["Read", "Glob", "Grep"],
+    "mcp_servers": {}
+  },
+  "agents": {
+    "resolver": {},
+    "partitioner": {},
+    "reviewer": {},
+    "evaluator": { "model": "haiku" },
+    "judge": { "model": "opus" }
   }
 }
+`;
+
+const EXAMPLE_CRITERION = `---
+description: Example criterion — checks for TODO/FIXME comments
+globs:
+  - "src/**/*.ts"
+  - "src/**/*.js"
+  - "!src/**/*.test.*"
+partition: one task per file
+model: haiku
+---
+
+Check the assigned files for TODO, FIXME, HACK, or XXX comments.
+(This example uses haiku since it's a simple pattern match — no judgment needed.)
+
+For each one found, report:
+- severity: "info"
+- description: what the comment says
+- suggestion: null (these are just informational)
+
+If no such comments exist, return an empty array.
+
+This is a starter criterion to verify your setup works. Replace it with
+criteria that match your project's review needs.
+`;
 
 /** `deskcheck list` */
 function listCommand(): void {
@@ -284,7 +462,7 @@ async function diffCommand(
 
   // Discover modules and optionally filter by --criteria
   const modulesDir = path.resolve(projectRoot, config.modules_dir);
-  let modules = discoverModules(modulesDir);
+  let modules = discoverModules(modulesDir, config.defaultModel);
 
   if (options.criteria) {
     const patterns = options.criteria.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
@@ -336,11 +514,11 @@ async function diffCommand(
     process.exit(0);
   }
 
-  // Execute. If the orchestrator throws (per-task errors are handled
-  // internally and don't escape), stamp the failure on the plan first.
+  // Execute. CLI --concurrency overrides config.concurrency.
+  const maxConcurrent = options.concurrency || config.concurrency;
   const orchestrator = new ReviewOrchestratorService(config, projectRoot);
   try {
-    await executeAndPrint(orchestrator, plan.plan_id);
+    await executeAndPrint(orchestrator, plan.plan_id, maxConcurrent);
   } catch (err) {
     storage.setFailure(plan.plan_id, {
       step: "reviewing",
@@ -399,7 +577,7 @@ async function deskchecCommand(
 
   // Step 2: discover and filter criteria (programmatic, no LLM).
   const modulesDir = path.resolve(projectRoot, config.modules_dir);
-  let modules = discoverModules(modulesDir);
+  let modules = discoverModules(modulesDir, config.defaultModel);
   if (criteriaFilter) {
     modules = filterModules(modules, criteriaFilter);
   }
@@ -456,7 +634,7 @@ async function deskchecCommand(
   // as failed at the reviewing step before re-raising.
   const orchestrator = new ReviewOrchestratorService(config, projectRoot);
   try {
-    await executeAndPrint(orchestrator, plan.plan_id);
+    await executeAndPrint(orchestrator, plan.plan_id, config.concurrency);
   } catch (err) {
     storage.setFailure(plan.plan_id, {
       step: "reviewing",
@@ -603,7 +781,7 @@ const program = new Command();
 program
   .name("deskcheck")
   .description("Modular code deskcheck tool powered by Claude")
-  .version("0.4.0");
+  .version("0.4.1");
 
 // Default command: natural language deskcheck
 program
@@ -660,8 +838,15 @@ Examples:
 program
   .command("init")
   .description("Initialize deskcheck configuration and directories")
-  .action(() => {
-    try { initCommand(); } catch (error) {
+  .option("--explain", "Print a detailed reference of all config and criterion options")
+  .action((options: { explain?: boolean }) => {
+    try {
+      if (options.explain) {
+        explainConfig();
+      } else {
+        initCommand();
+      }
+    } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }

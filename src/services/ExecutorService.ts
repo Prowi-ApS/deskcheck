@@ -24,7 +24,7 @@ export interface ExecutorResult {
  * Build the merged MCP servers map for an executor agent.
  *
  * Combines shared MCP servers from config with any additional servers
- * defined for the executor role.
+ * defined for the reviewer role.
  */
 export function buildMcpServers(config: ReviewConfig): Record<string, SdkMcpServerConfig> {
   const servers: Record<string, SdkMcpServerConfig> = {};
@@ -39,10 +39,10 @@ export function buildMcpServers(config: ReviewConfig): Record<string, SdkMcpServ
     };
   }
 
-  // Add executor-specific additional servers
-  const executorServers = config.agents.executor.additional_mcp_servers;
-  if (executorServers) {
-    for (const [name, serverConfig] of Object.entries(executorServers)) {
+  // Add reviewer-specific additional servers
+  const reviewerServers = config.agents.reviewer.additional_mcp_servers;
+  if (reviewerServers) {
+    for (const [name, serverConfig] of Object.entries(reviewerServers)) {
       servers[name] = {
         type: "stdio",
         command: serverConfig.command,
@@ -84,9 +84,9 @@ export function buildAllowedTools(config: ReviewConfig): string[] {
     }
   }
 
-  const executorTools = config.agents.executor.additional_tools;
-  if (executorTools) {
-    for (const tool of executorTools) {
+  const reviewerTools = config.agents.reviewer.additional_tools;
+  if (reviewerTools) {
+    for (const tool of reviewerTools) {
       if (!tools.includes(tool)) {
         tools.push(tool);
       }
@@ -167,7 +167,12 @@ export class ExecutorService {
           cwd: this.projectRoot,
           persistSession: false,
           abortController,
-          ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
+          // Always pass mcpServers explicitly — even if empty — so the SDK
+          // doesn't fall back to auto-discovering MCP servers from the user's
+          // Claude Code config. Without this, every agent spawns all globally-
+          // configured MCP servers (postgres, slack, etc.), adding startup
+          // latency per task.
+          mcpServers,
         },
       })) {
         messages.push(message);
