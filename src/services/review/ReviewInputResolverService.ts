@@ -88,6 +88,7 @@ export class ReviewInputResolverService {
     });
 
     const resolverModel = this.config.agents.resolver.model ?? this.config.defaultModel;
+    const resolverEffort = this.config.agents.resolver.effort;
     const systemPrompt =
       buildResolverPrompt() +
       (scopeOverride
@@ -102,6 +103,7 @@ export class ReviewInputResolverService {
         prompt: input,
         options: {
           model: resolverModel,
+          ...(resolverEffort ? { effort: resolverEffort } : {}),
           systemPrompt,
           tools: [
             "Bash",

@@ -109,6 +109,7 @@ export class ReviewOrchestratorService {
         // and config tools via `extraTools`.
         const result = await this.executorService.execute(executorPrompt, modelId, {
           extraTools: claimedTask.tools,
+          effort: claimedTask.effort,
         });
         taskUsage = result.usage;
 

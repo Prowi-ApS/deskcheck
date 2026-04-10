@@ -1,12 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import type { AgentModel, ReviewModule } from "../../types/criteria.js";
+import type { AgentEffort, AgentModel, ReviewModule } from "../../types/criteria.js";
 
 const VALID_MODELS: ReadonlySet<string> = new Set<AgentModel>([
   "haiku",
   "sonnet",
   "opus",
+]);
+
+const VALID_EFFORTS: ReadonlySet<string> = new Set<AgentEffort>([
+  "low",
+  "medium",
+  "high",
+  "max",
 ]);
 
 const DEFAULT_PARTITION = "one task per matched file";
@@ -89,6 +96,14 @@ export function parseModule(filePath: string, basePath: string, defaultModel?: A
     tools = frontmatter.tools as string[];
   }
 
+  // effort — optional, must be one of the valid effort levels if present.
+  const effort = frontmatter.effort as AgentEffort | undefined;
+  if (effort !== undefined && !VALID_EFFORTS.has(effort)) {
+    throw new Error(
+      `Invalid criterion ${relativePath}: "effort" must be one of: ${[...VALID_EFFORTS].join(", ")}. Got: ${JSON.stringify(effort)}`,
+    );
+  }
+
   // --- Build the criterion ID from relative path without extension ---
 
   const id = relativePath.replace(/\.md$/, "").split(path.sep).join("/");
@@ -100,6 +115,7 @@ export function parseModule(filePath: string, basePath: string, defaultModel?: A
     globs: frontmatter.globs as string[],
     partition,
     model: model as AgentModel,
+    effort,
     tools,
     prompt: content.trim(),
   };

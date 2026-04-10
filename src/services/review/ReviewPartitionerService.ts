@@ -155,6 +155,9 @@ export class ReviewPartitionerService {
     });
 
     const partitionerModel = this.config.agents.partitioner.model ?? this.config.defaultModel;
+    // Partitioner inherits the criterion's effort level — the partitioner's
+    // complexity correlates with the criterion's. Config-level override wins.
+    const partitionerEffort = this.config.agents.partitioner.effort ?? criterion.effort;
     const systemPrompt = buildPartitionerPrompt(criterion, matchedFiles, scope);
 
     const abortController = new AbortController();
@@ -168,6 +171,7 @@ export class ReviewPartitionerService {
         prompt: `Partition the files for criterion ${criterion.id}.`,
         options: {
           model: partitionerModel,
+          ...(partitionerEffort ? { effort: partitionerEffort } : {}),
           systemPrompt,
           tools: [
             "Read",

@@ -5,6 +5,9 @@
 /** Claude model tier used for agent execution. */
 export type AgentModel = "haiku" | "sonnet" | "opus";
 
+/** Agent SDK effort level — controls how much reasoning the model applies. */
+export type AgentEffort = "low" | "medium" | "high" | "max";
+
 /** A criterion parsed from a markdown file in the criteria directory. */
 export interface ReviewModule {
   /** Unique identifier, e.g. "architecture/dto-enforcement". */
@@ -19,6 +22,12 @@ export interface ReviewModule {
   partition: string;
   /** Claude model tier to use for executor agents. */
   model: AgentModel;
+  /**
+   * Agent SDK effort level. Controls reasoning depth — "low" for cheap
+   * pattern-matching criteria on haiku, "max" for deep architectural analysis.
+   * Undefined means use the SDK default.
+   */
+  effort?: AgentEffort;
   /**
    * Extra tool names to make available to reviewers running this criterion,
    * layered on top of the built-in reviewer tools and config-level tools.

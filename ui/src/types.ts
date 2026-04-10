@@ -4,6 +4,7 @@
 // =============================================================================
 
 export type AgentModel = 'haiku' | 'sonnet' | 'opus'
+export type AgentEffort = 'low' | 'medium' | 'high' | 'max'
 
 export type FindingSeverity = 'critical' | 'warning' | 'info'
 
@@ -50,6 +51,7 @@ export interface ReviewTask {
   focus: string | null
   hint: string | null
   model: AgentModel
+  effort?: AgentEffort
   tools: string[]
   status: TaskStatus
   created_at: string

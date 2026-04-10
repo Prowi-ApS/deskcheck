@@ -1,4 +1,4 @@
-import type { AgentModel } from "./criteria.js";
+import type { AgentEffort, AgentModel } from "./criteria.js";
 
 // =============================================================================
 // Common Union Types
@@ -83,6 +83,8 @@ export interface ReviewTask {
   hint: string | null;
   /** Claude model tier for the executor agent. */
   model: AgentModel;
+  /** Agent SDK effort level. Undefined = SDK default. */
+  effort?: AgentEffort;
   /**
    * Extra tool names this reviewer should have access to, copied from the
    * criterion's frontmatter at addTask time. Layered on top of the built-in

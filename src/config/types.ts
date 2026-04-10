@@ -1,4 +1,4 @@
-import type { AgentModel } from "../types/criteria.js";
+import type { AgentEffort, AgentModel } from "../types/criteria.js";
 
 // =============================================================================
 // Config Types (.deskcheck/config.json)
@@ -14,10 +14,12 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
-/** Per-role agent configuration (planner, executor, evaluator). */
+/** Per-role agent configuration. */
 export interface AgentRoleConfig {
   /** Override the default model for this role. */
   model?: AgentModel;
+  /** Override the effort level for this role. */
+  effort?: AgentEffort;
   /** Additional tools beyond the shared set. */
   additional_tools?: string[];
   /** Additional MCP servers beyond the shared set. */

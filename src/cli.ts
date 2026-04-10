@@ -247,7 +247,7 @@ ${BOLD}shared:${RESET} ${DIM}— configuration shared across all agent roles${RE
 
 ${BOLD}agents:${RESET} ${DIM}— per-role agent configuration${RESET}
 
-  Each role has the same shape: { model?, additional_tools?, additional_mcp_servers? }
+  Each role has the same shape: { model?, effort?, additional_tools?, additional_mcp_servers? }
 
   ${GREEN}agents.resolver${RESET}      ${DIM}(default model: from defaultModel)${RESET}
     The natural-language input resolver. Only used by \`deskcheck "<prompt>"\`.
@@ -284,9 +284,15 @@ ${BOLD}Criterion frontmatter fields:${RESET}
                 Natural-language instruction for how to split files into subtasks.
                 Examples: "one task per file", "one public method per task",
                           "group each test with its source file"
-  ${GREEN}model${RESET}         ${DIM}(optional, default: "haiku")${RESET}
+  ${GREEN}model${RESET}         ${DIM}(optional, default: from defaultModel)${RESET}
                 Claude model for reviewer agents: haiku, sonnet, opus.
                 ${YELLOW}Use sonnet if the criterion has "What NOT to check" rules.${RESET}
+  ${GREEN}effort${RESET}        ${DIM}(optional, default: SDK default)${RESET}
+                Agent reasoning effort: low, medium, high, max.
+                Use "low" for cheap pattern-matching criteria on haiku.
+                Use "high"/"max" for complex architectural analysis.
+                Omit to let the SDK pick the default for the model.
+                Also applied to the partitioner agent for this criterion.
   ${GREEN}tools${RESET}         ${DIM}(optional, default: [])${RESET}
                 Extra tools for reviewers running this criterion.
                 Layered on top of built-ins + shared + executor tools.
@@ -802,7 +808,7 @@ const program = new Command();
 program
   .name("deskcheck")
   .description("Modular code deskcheck tool powered by Claude")
-  .version("0.4.3");
+  .version("0.4.4");
 
 // Default command: natural language deskcheck
 program

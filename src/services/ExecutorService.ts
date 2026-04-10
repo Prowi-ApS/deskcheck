@@ -1,7 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { McpServerConfig as SdkMcpServerConfig, PermissionMode } from "@anthropic-ai/claude-agent-sdk";
 import type { ReviewConfig } from "../config/types.js";
-import type { AgentModel } from "../types/criteria.js";
+import type { AgentEffort, AgentModel } from "../types/criteria.js";
 import type { TaskUsage } from "../types/review.js";
 
 // =============================================================================
@@ -131,6 +131,7 @@ export class ExecutorService {
   async execute(prompt: string, model: AgentModel, options?: {
     maxTurns?: number;
     timeoutMs?: number;
+    effort?: AgentEffort;
     tools?: string[];
     extraTools?: string[];
     mcpServers?: Record<string, SdkMcpServerConfig>;
@@ -148,6 +149,7 @@ export class ExecutorService {
     const maxTurns = options?.maxTurns ?? 25;
     const timeoutMs = options?.timeoutMs ?? 5 * 60 * 1000;
     const permissionMode: PermissionMode = options?.permissionMode ?? "dontAsk";
+    const effort = options?.effort;
 
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), timeoutMs);
@@ -161,6 +163,7 @@ export class ExecutorService {
         prompt,
         options: {
           model,
+          ...(effort ? { effort } : {}),
           tools: allowedTools,
           permissionMode,
           maxTurns,

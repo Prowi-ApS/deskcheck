@@ -152,6 +152,7 @@ export async function buildPlanWithTasks(
         focus: subtask.focus,
         hint: subtask.hint,
         model: match.module.model,
+        effort: match.module.effort,
         tools: match.module.tools,
         prompt: match.module.prompt,
       });

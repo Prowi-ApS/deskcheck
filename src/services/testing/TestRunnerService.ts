@@ -195,7 +195,9 @@ export class TestRunnerService {
 
     // Step 5: Build executor prompt and execute
     const prompt = buildExecutorPrompt(task);
-    const executorResult = await executorService.execute(prompt, criterion.model);
+    const executorResult = await executorService.execute(prompt, criterion.model, {
+      effort: criterion.effort,
+    });
 
     // Step 6: Parse findings
     const findings = parseFindings(executorResult.resultText);

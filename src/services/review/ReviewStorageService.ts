@@ -332,6 +332,7 @@ export class ReviewStorageService {
         focus: task.focus ?? null,
         hint: task.hint,
         model: task.model,
+        effort: task.effort,
         tools: task.tools ?? [],
         status: "pending",
         created_at: new Date().toISOString(),
